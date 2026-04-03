@@ -1,0 +1,30 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+sse-starlette
+python-multipart
+
+# Environment
+python-dotenv
+pydantic-settings
+
+# LangChain + LangGraph
+langchain
+langchain-community
+langchain-openai
+langchain-google-genai
+langgraph
+langsmith
+
+# Vector Store
+faiss-cpu
+
+# Re-Ranking
+sentence-transformers
+cohere
+
+# Web Search
+tavily-python
+
+# Document Processing
+pypdf
