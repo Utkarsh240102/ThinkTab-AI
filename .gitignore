@@ -1,0 +1,70 @@
+# ===========================
+# Python / Backend
+# ===========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+backend/venv/
+backend/.venv/
+venv/
+.venv/
+
+# Environment variables (NEVER commit this)
+.env
+.env.*
+!.env.example
+
+# ===========================
+# LangSmith / LangChain cache
+# ===========================
+.langchain.db
+*.db
+*.sqlite
+
+# ===========================
+# FAISS / Vector Store
+# ===========================
+*.faiss
+*.index
+faiss_store/
+
+# ===========================
+# Node / Frontend
+# ===========================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/build/
+
+# ===========================
+# Chrome Extension Build
+# ===========================
+dist-zip/
+*.crx
+*.pem
+
+# ===========================
+# OS & Editor
+# ===========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===========================
+# Logs
+# ===========================
+*.log
+logs/
