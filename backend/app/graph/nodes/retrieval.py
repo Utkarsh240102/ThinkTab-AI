@@ -1,3 +1,4 @@
+import os
 from sentence_transformers import CrossEncoder
 from langchain_core.documents import Document
 from app.services.vector_store import embedding_cache
@@ -6,11 +7,20 @@ from app.core.config import settings
 
 # ─────────────────────────────────────────────────────────────
 # Cross-Encoder Re-ranker
-# Loaded once at startup — NOT on every request (expensive!)
-# BAAI/bge-reranker-base is a small, fast, high-quality model
+# Saved locally to D:\PROJECTS\ThinkTab-AI\models\ instead of
+# the global HuggingFace cache (~/.cache/huggingface)
 # ─────────────────────────────────────────────────────────────
+MODEL_CACHE_DIR = os.path.join(
+    os.path.dirname(__file__),   # backend/app/graph/nodes/
+    "../../../../models"          # → D:/PROJECTS/ThinkTab-AI/models/
+)
+
 print("[Retrieval] Loading Cross-Encoder re-ranker model...")
-reranker = CrossEncoder("BAAI/bge-reranker-base")
+reranker = CrossEncoder(
+    "BAAI/bge-reranker-base",
+    max_length=512,
+    cache_folder=os.path.abspath(MODEL_CACHE_DIR)
+)
 print("[Retrieval] Re-ranker ready.")
 
 

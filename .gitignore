@@ -38,6 +38,11 @@ venv/
 faiss_store/
 
 # ===========================
+# Downloaded ML Models
+# ===========================
+models/
+
+# ===========================
 # Node / Frontend
 # ===========================
 node_modules/
