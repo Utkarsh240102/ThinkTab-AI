@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from app.graph.state import GraphState
 from app.graph.fast_mode import run_fast_mode
+from app.graph.auto_router import route_query
 
 router = APIRouter()
 
@@ -67,19 +68,12 @@ async def chat(request: ChatRequest):
     """
 
     async def event_stream():
-        # ── Step 1: Acknowledge mode selection ────────────────
-        yield sse_event({
-            "type": "mode",
-            "value": f"Mode received: {request.mode.upper()} — Query: '{request.query}'"
-        })
-        await asyncio.sleep(0.1)   # Small delay to simulate processing
-
-        # ── Step 2: Run Fast Mode Pipeline ────────────────
+        # ── Step 1: Initialize State ────────────────
         state: GraphState = {
             "query": request.query,
             "original_query": request.query,
-            "mode": "fast",
-            "selected_mode": "fast",
+            "mode": request.mode,
+            "selected_mode": None,
             "chat_history": [msg.model_dump() for msg in request.chat_history] if request.chat_history else [],
             "contexts": [ctx.model_dump() for ctx in request.contexts] if request.contexts else [],
             "docs": [],
@@ -99,9 +93,38 @@ async def chat(request: ChatRequest):
             "retrieval_retries": 0
         }
 
-        async for event_str in run_fast_mode(state):
-            yield event_str
-            await asyncio.sleep(0.1)
+        # ── Step 2: Auto Router (Mode Selection) ────────────────
+        if request.mode == "auto":
+            selected_mode = route_query(state)
+            yield sse_event({"type": "mode", "value": f"Auto → Selected: {selected_mode.title()} " + ("⚡" if selected_mode == "fast" else "🧠")})
+        else:
+            selected_mode = request.mode
+            yield sse_event({"type": "mode", "value": f"{selected_mode.title()} Mode " + ("⚡" if selected_mode == "fast" else "🧠")})
+            
+        state["selected_mode"] = selected_mode
+
+        # ── Step 3: Run Selected Pipeline ────────────────
+        if selected_mode == "fast":
+            safety_net_triggered = False
+            async for event_str in run_fast_mode(state):
+                # intercept safety net final event if needed
+                if '"answer": "I cannot find the answer on this page."' in event_str:
+                    safety_net_triggered = True
+                    break # Skip yielding the final failure event, we'll upgrade
+                yield event_str
+                await asyncio.sleep(0.1)
+                
+            if safety_net_triggered:
+                # ── Safety Net: Run Deep Mode ────────────────
+                yield sse_event({"type": "status", "value": "Information not found locally. Upgrading to Deep Search... 🧠"})
+                state["selected_mode"] = "deep"
+                yield sse_event({"type": "status", "value": "(Deep Mode implementation coming in Step 8)"})
+                # TODO: async for event in run_deep_mode(state): yield event
+                
+        else:
+            # ── Deep Mode Placeholder ────────────────
+            yield sse_event({"type": "status", "value": "(Deep Mode implementation coming in Step 8)"})
+            # TODO: async for event in run_deep_mode(state): yield event
 
     return StreamingResponse(
         event_stream(),
