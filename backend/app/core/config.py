@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # Models
     EMBEDDING_MODEL: str = "models/gemini-embedding-001"
     OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
-    GROQ_MODEL: str = "meta-llama/llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     
     # Cache & Thresholds
     MAX_CACHE_PAGES: int = 20
