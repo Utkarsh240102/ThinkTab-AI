@@ -273,12 +273,12 @@ This layer runs **before** the LangGraph pipeline. It decides which pipeline to 
     Return JSON: {"intent": "simple" | "complex"}"
    ```
 
-4. **Transparency Event → HITL**  
+4. **Transparency Event → Soft HITL (Transparent Override)**  
    Stream back immediately:
    ```json
    {"type": "mode", "value": "Auto → Selected: Fast ⚡"}
    ```
-   The frontend displays `[Switch to Deep]` button. If the user clicks it, it cancels the current stream and re-sends `mode: "deep"`.
+   The frontend displays `[Switch to Deep]` button. We specifically use a Soft HITL so Auto Mode doesn't block execution to ask for permission. If the user clicks it, it cancels the current stream and re-sends `mode: "deep"`.
 
 5. **Safety Net Failover**  
    If Fast Mode is selected and the generator returns `"I cannot find the answer on this page"`, the backend catches this signal and silently re-triggers Deep Mode, streaming `{"type": "status", "value": "Upgrading to Deep Search... 🧠"}` to the frontend.
