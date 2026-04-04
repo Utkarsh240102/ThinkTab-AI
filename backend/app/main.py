@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.api.endpoints import router as api_router
 
 app = FastAPI(title="ThinkTab AI Backend")
 
@@ -23,6 +24,9 @@ async def health_check():
             "embedding": settings.EMBEDDING_MODEL
         }
     }
+
+# Register all /api routes (chat, embed, cache)
+app.include_router(api_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
