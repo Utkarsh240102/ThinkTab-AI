@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     UPPER_CRAG_THRESHOLD: float = 0.7
     LOWER_CRAG_THRESHOLD: float = 0.3
 
+    # Self-RAG Retry Limits
+    MAX_REVISION_RETRIES: int = 3    # Max times to revise a hallucinating answer (IsSUP)
+    MAX_RETRIEVAL_RETRIES: int = 3   # Max times to rewrite + re-retrieve if answer is useless (IsUSE)
+
     class Config:
         env_file = "../../../.env"
         extra = "ignore"
