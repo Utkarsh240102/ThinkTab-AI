@@ -1,9 +1,13 @@
+import json
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, AsyncGenerator
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.graph.state import GraphState
 from app.services.llm_service import fast_llm
+from app.graph.nodes.contextualizer import contextualize_query
+from app.graph.nodes.retrieval import retrieve_and_rerank
+from app.graph.nodes.generation import generate_fast
 
 class KeepIndices(BaseModel):
     keep: List[int] = Field(description="List of integer indices (0-indexed) of the chunks to keep")
@@ -55,3 +59,46 @@ def batch_crag_filter(state: GraphState) -> GraphState:
         **state,
         "good_docs": good_docs
     }
+
+async def run_fast_mode(initial_state: GraphState) -> AsyncGenerator[str, None]:
+    """
+    Fast Mode Pipeline Runner (yields SSE strings)
+    
+    Contextualize -> Retrieve -> Re-rank -> Batch Filter -> Generate
+    """
+    state = initial_state
+    
+    def sse(event_type: str, data: dict):
+        payload = {"type": event_type, **data}
+        return f"data: {json.dumps(payload)}\n\n"
+
+    # Step 1: Contextualize
+    state = contextualize_query(state)
+    
+    # Step 2: Retrieve & Re-rank
+    yield sse("status", {"value": "Retrieving relevant paragraphs... "})
+    state = retrieve_and_rerank(state)
+    
+    # Step 3: Fast CRAG Filter
+    yield sse("status", {"value": "Filtering out noise... "})
+    state = batch_crag_filter(state)
+    
+    # Step 4: Generate Answer
+    yield sse("status", {"value": "Writing answer... "})
+    state = generate_fast(state)
+    
+    # Check Safety Net for upgrade
+    if state.get("final_answer", "").strip().lower() == "i cannot find the answer on this page.":
+        print("[Fast Mode] Safety net triggered: Information not found -> Upgrading to Deep Mode")
+        yield sse("status", {"value": "Information not found locally. Upgrading to Deep Search... 🧠"})
+        
+        # In a full implementation, you would trigger Deep Mode here.
+        # For now, we return the Fast Mode failure gracefully.
+        
+    yield sse("final", {
+        "answer": state.get("final_answer", ""),
+        "evidence": state.get("evidence", []),
+        "confidence_score": state.get("confidence_score", 0.0),
+        "reasoning_summary": state.get("reasoning_summary", "")
+    })
+

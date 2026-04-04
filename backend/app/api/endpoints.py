@@ -5,6 +5,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 
+from app.graph.state import GraphState
+from app.graph.fast_mode import run_fast_mode
+
 router = APIRouter()
 
 
@@ -69,35 +72,36 @@ async def chat(request: ChatRequest):
             "type": "mode",
             "value": f"Mode received: {request.mode.upper()} — Query: '{request.query}'"
         })
-        await asyncio.sleep(0.5)   # Small delay to simulate processing
+        await asyncio.sleep(0.1)   # Small delay to simulate processing
 
-        # ── Step 2: Stream fake status updates ────────────────
-        fake_statuses = [
-            "Reading sources...",
-            "Evaluating chunk relevance...",
-            "Filtering sentences...",
-            "Writing answer...",
-            "Checking for hallucinations...",
-        ]
+        # ── Step 2: Run Fast Mode Pipeline ────────────────
+        state: GraphState = {
+            "query": request.query,
+            "original_query": request.query,
+            "mode": "fast",
+            "selected_mode": "fast",
+            "chat_history": [msg.model_dump() for msg in request.chat_history] if request.chat_history else [],
+            "contexts": [ctx.model_dump() for ctx in request.contexts] if request.contexts else [],
+            "docs": [],
+            "good_docs": [],
+            "refined_context": "",
+            "crag_verdict": None,
+            "web_query": "",
+            "web_docs": [],
+            "draft_answer": "",
+            "final_answer": "",
+            "evidence": [],
+            "confidence_score": 0.0,
+            "reasoning_summary": "",
+            "is_supported": None,
+            "is_useful": None,
+            "revision_retries": 0,
+            "retrieval_retries": 0
+        }
 
-        for status in fake_statuses:
-            yield sse_event({"type": "status", "value": status})
-            await asyncio.sleep(0.4)   # Simulate time between steps
-
-        # ── Step 3: Send a fake final answer ──────────────────
-        yield sse_event({
-            "type": "final",
-            "answer": f"[TEST] This is a simulated answer to: '{request.query}'",
-            "evidence": [
-                {
-                    "source": ctx.source_id,
-                    "snippet": ctx.content[:100] + "..."  # First 100 chars of each source
-                }
-                for ctx in request.contexts
-            ],
-            "confidence_score": 0.99,
-            "reasoning_summary": "This is a test run. Real AI logic coming in Step 4."
-        })
+        async for event_str in run_fast_mode(state):
+            yield event_str
+            await asyncio.sleep(0.1)
 
     return StreamingResponse(
         event_stream(),
