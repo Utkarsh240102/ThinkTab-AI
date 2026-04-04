@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     MAX_REVISION_RETRIES: int = 3    # Max times to revise a hallucinating answer (IsSUP)
     MAX_RETRIEVAL_RETRIES: int = 3   # Max times to rewrite + re-retrieve if answer is useless (IsUSE)
 
+    # Fast Mode Retrieval Settings
+    FAST_MODE_RETRIEVE_K: int = 10   # How many chunks FAISS fetches initially
+    FAST_MODE_RERANK_TOP_K: int = 5  # How many chunks survive after re-ranking
+
     class Config:
         env_file = "../../../.env"
         extra = "ignore"
