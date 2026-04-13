@@ -1,3 +1,10 @@
+import os
+from dotenv import load_dotenv
+
+# Load .env FIRST before any other imports that might need API keys
+# This ensures LangSmith tracing variables are set before LangChain initializes
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
