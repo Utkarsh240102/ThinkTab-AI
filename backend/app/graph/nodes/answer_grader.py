@@ -66,7 +66,11 @@ def check_usefulness(state: GraphState) -> GraphState:
             **state,
             "is_useful": True,               # Force exit the retrieval loop
             "final_answer": draft_answer,
-            "confidence_score": max(state.get("confidence_score") or 0.0, 0.30),
+            # IMPORTANT: Use min() not max() here.
+            # max(0.85, 0.30) = 0.85 → falsely reports HIGH confidence for an
+            # answer that failed all retrieval validation cycles!
+            # min(0.85, 0.35) = 0.35 → correctly caps at LOW confidence.
+            "confidence_score": min(state.get("confidence_score") or 0.0, 0.35),
             "reasoning_summary": f"Answer accepted after {retrieval_retries} retrieval attempts. Confidence is low."
         }
 
@@ -147,5 +151,13 @@ Rephrase this question using different keywords to improve document retrieval:""
 
     return {
         **state,
-        "query": rewritten_query,   # The graph will use this new query for re-retrieval
+        "query": rewritten_query,       # The graph will use this new query for re-retrieval
+        "revision_retries": 0,          # Reset revision counter for the new retrieval cycle
+
+        # ── Clear stale data from the previous cycle ─────────────────────────
+        # If we don't clear these, crag_refiner will mix the new good_docs with
+        # old web results, and the routing may use a stale crag_verdict.
+        "web_docs": [],                 # Old web search results are no longer relevant
+        "good_docs": [],                # Old local chunks will be replaced by re-retrieval
+        "crag_verdict": None,           # Force eval_docs to make a fresh verdict
     }
