@@ -37,5 +37,6 @@ app.include_router(api_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
-    # Make sure to run this file so uvicorn can find the app wrapper correctly!
+    # Always run via uvicorn to ensure the Python path is set correctly.
+    # This is equivalent to: uvicorn app.main:app --reload
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
