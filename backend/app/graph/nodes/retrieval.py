@@ -49,6 +49,12 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         source_id = ctx["source_id"]
         content = ctx["content"]
 
+        # Guard: skip empty or whitespace-only content — FAISS.from_documents
+        # crashes with IndexError when there are no chunks to embed
+        if not content or not content.strip():
+            print(f"[Retrieval] WARNING: Skipping empty content for source '{source_id}'")
+            continue
+
         print(f"[Retrieval] Searching FAISS for source: {source_id}")
 
         # get_or_embed: returns cached FAISS index or embeds fresh

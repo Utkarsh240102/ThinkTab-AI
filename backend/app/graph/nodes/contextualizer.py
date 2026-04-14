@@ -47,8 +47,9 @@ def contextualize_query(state: GraphState) -> GraphState:
     # We only use the last 4 to keep the prompt short and cheap
     recent_history = chat_history[-4:]
     history_text = "\n".join([
-        f"{msg['role'].capitalize()}: {msg['content']}"
+        f"{msg.get('role', 'user').capitalize()}: {msg.get('content', '')}"
         for msg in recent_history
+        if msg.get("content")   # skip empty messages
     ])
 
     print(f"[Contextualizer] Resolving references in: '{query}'")
