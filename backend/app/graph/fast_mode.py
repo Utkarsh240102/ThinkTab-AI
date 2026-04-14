@@ -90,7 +90,8 @@ async def run_fast_mode(initial_state: GraphState) -> AsyncGenerator[str, None]:
     # Check Safety Net for upgrade
     if state.get("final_answer", "").strip().lower() == "i cannot find the answer on this page.":
         print("[Fast Mode] Safety net triggered: Information not found -> Upgrading to Deep Mode")
-        yield sse("status", {"value": "Information not found locally. Upgrading to Deep Search... 🧠"})
+        # Note: endpoints.py handles the "Upgrading to Deep Search" status message
+        # to avoid showing it twice in the UI
         
         # In a full implementation, you would trigger Deep Mode here.
         # For now, we return the Fast Mode failure gracefully.

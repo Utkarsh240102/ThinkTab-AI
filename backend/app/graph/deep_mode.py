@@ -8,7 +8,7 @@ from app.graph.nodes.retrieval import retrieve_and_rerank
 from app.graph.nodes.crag_evaluator import eval_docs
 from app.graph.nodes.web_search import rewrite_for_web, search_web
 from app.graph.nodes.crag_refiner import crag_refiner
-from app.graph.nodes.generation import generate_fast as generate_draft
+from app.graph.nodes.generation import generate_deep
 from app.graph.nodes.hallucination_grader import check_hallucination, revise_answer
 from app.graph.nodes.answer_grader import check_usefulness, rewrite_question
 
@@ -99,7 +99,7 @@ def build_deep_mode_graph():
     graph.add_node("rewrite_for_web",        rewrite_for_web)
     graph.add_node("search_web",             search_web)
     graph.add_node("crag_refiner",           crag_refiner)
-    graph.add_node("generate_draft",         generate_draft)
+    graph.add_node("generate_draft",         generate_deep)
     graph.add_node("check_hallucination",    check_hallucination)
     graph.add_node("revise_answer",          revise_answer)
     graph.add_node("check_usefulness",       check_usefulness)

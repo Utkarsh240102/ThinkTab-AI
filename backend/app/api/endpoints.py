@@ -142,10 +142,21 @@ async def chat(request: ChatRequest):
         if selected_mode == "fast":
             safety_net_triggered = False
             async for event_str in run_fast_mode(state):
-                # intercept safety net final event if needed
-                if '"answer": "I cannot find the answer on this page."' in event_str:
+                # Robustly detect the safety net by parsing the SSE JSON
+                # instead of fragile raw string matching
+                is_safety_net = False
+                try:
+                    if event_str.startswith("data:"):
+                        payload = json.loads(event_str[5:].strip())
+                        if (payload.get("type") == "final" and
+                            payload.get("answer", "").strip().lower() == "i cannot find the answer on this page."):
+                            is_safety_net = True
+                except Exception:
+                    pass  # If parsing fails, treat as a normal event
+
+                if is_safety_net:
                     safety_net_triggered = True
-                    break # Skip yielding the final failure event, we'll upgrade
+                    break  # Don't yield the failure final event — we'll upgrade instead
                 yield event_str
                 await asyncio.sleep(0.1)
                 
