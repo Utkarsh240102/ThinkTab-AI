@@ -18,7 +18,7 @@ class LRUEmbeddingCache:
       instantly return the stored FAISS index.
     """
 
-    def __init__(self, max_size: int = None):
+    def __init__(self, max_size: int | None = None):
         # OrderedDict remembers insertion/access order — perfect for LRU!
         self.cache: OrderedDict[str, FAISS] = OrderedDict()
         self.max_size = max_size or settings.MAX_CACHE_PAGES  # Default: 20

@@ -65,7 +65,7 @@ Latest question to rewrite:
     ]
 
     response = fast_llm.invoke(messages)
-    rewritten_query = response.content.strip()
+    rewritten_query = str(response.content).strip()
 
     print(f"[Contextualizer] Rewritten: '{rewritten_query}'")
 

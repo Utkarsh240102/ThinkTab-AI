@@ -83,7 +83,8 @@ def crag_refiner(state: GraphState) -> GraphState:
     print(f"[CRAG Refiner] Kept {len(refined_sentences)} out of {len(all_sentences)} sentences.")
     
     # Group sentences by their source so the final generator knows where they came from
-    source_map = {}
+    from typing import Dict, List
+    source_map: Dict[str, List[str]] = {}
     for s_dict in refined_sentences:
         src = s_dict["source"]
         if src not in source_map:

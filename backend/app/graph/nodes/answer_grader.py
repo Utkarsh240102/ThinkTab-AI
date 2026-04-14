@@ -144,7 +144,7 @@ Rephrase this question using different keywords to improve document retrieval:""
     ]
 
     response = fast_llm.invoke(messages)
-    rewritten_query = response.content.strip()
+    rewritten_query = str(response.content).strip()
 
     print(f"[Question Rewriter] Original: '{original_query}'")
     print(f"[Question Rewriter] Rewritten: '{rewritten_query}'")

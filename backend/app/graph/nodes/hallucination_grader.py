@@ -135,8 +135,8 @@ USER'S QUESTION: {query}
 Write a clean, accurate answer using only the context above:""")
     ]
 
-    response = smart_llm.invoke(messages)
-    revised_draft = response.content.strip()
+    # Cast response.content to string to prevent Union errors if the message returns structured chunks
+    revised_draft = str(response.content).strip()
 
     print(f"[Revise Answer] Revision complete. New draft length: {len(revised_draft)} chars")
 

@@ -81,10 +81,10 @@ def generate_fast(state: GraphState) -> GraphState:
         print(f"[Generation - Fast] Done. Confidence: {(result.confidence_score * 100):.1f}%")
         return {
             **state,
-            "final_answer": result.answer,
+            "final_answer": str(result.answer),
             "evidence": [item.model_dump() for item in result.evidence],
             "confidence_score": result.confidence_score,
-            "reasoning_summary": result.reasoning_summary
+            "reasoning_summary": str(result.reasoning_summary)
         }
     except Exception as e:
         print(f"[Generation - Fast] Error: {e}")
