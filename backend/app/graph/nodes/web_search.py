@@ -1,17 +1,15 @@
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_tavily import TavilySearch
 from langchain_core.documents import Document
 
 from app.graph.state import GraphState
 from app.services.llm_service import fast_llm
 from app.core.config import settings
 
-# Initialize the Tavily Web Search Tool
-web_search_tool = TavilySearchResults(
-    tavily_api_key=settings.TAVILY_API_KEY,
-    max_results=5,  # We only need the top 5 snippets
-    include_raw_content=False,
-    include_domains=[],
+# Initialize the Tavily Web Search Tool (new langchain_tavily package)
+web_search_tool = TavilySearch(
+    max_results=5,
+    topic="general",
 )
 
 # System Prompt for the Web Query Rewriter

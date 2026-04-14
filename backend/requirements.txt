@@ -26,7 +26,10 @@ sentence-transformers
 cohere
 
 # Web Search
-tavily-python
+langchain-tavily
+
+# HTTP Client (for tests)
+httpx
 
 # Document Processing
 pypdf

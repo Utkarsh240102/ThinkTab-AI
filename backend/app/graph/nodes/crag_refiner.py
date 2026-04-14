@@ -27,7 +27,9 @@ def crag_refiner(state: GraphState) -> GraphState:
     query = state["query"]
     
     # 1. Aggregate all available context chunks
-    all_chunks = state.get("good_docs", []) + state.get("web_docs", [])
+    # IMPORTANT: use 'or []' not state.get(key, []) because if the key EXISTS
+    # in the dict with value None, state.get(key, []) returns None, causing TypeError
+    all_chunks = (state.get("good_docs") or []) + (state.get("web_docs") or [])
     
     if not all_chunks:
         print("[CRAG Refiner] No documents available to refine.")
