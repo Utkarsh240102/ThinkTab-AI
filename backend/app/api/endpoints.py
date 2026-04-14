@@ -8,8 +8,23 @@ from typing import List, Optional
 from app.graph.state import GraphState
 from app.graph.fast_mode import run_fast_mode
 from app.graph.auto_router import route_query
+from app.graph.deep_mode import deep_mode_graph
 
 router = APIRouter()
+
+DEEP_NODE_MESSAGES = {
+    "contextualize_query": "Understanding question... 🤔",
+    "retrieve_and_rerank": "Searching documents... 🔍",
+    "eval_docs": "Evaluating document relevance... ⚖️",
+    "rewrite_for_web": "Preparing web search...",
+    "search_web": "Searching the web... 🌐",
+    "crag_refiner": "Refining context... ✨",
+    "generate_draft": "Drafting answer... ✍️",
+    "check_hallucination": "Fact-checking answer... 🕵️‍♂️",
+    "revise_answer": "Revising answer to remove hallucinations... 🔄",
+    "check_usefulness": "Verifying answer usefulness... 🎯",
+    "rewrite_question": "Rewriting question for better results... 🔄"
+}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -103,6 +118,26 @@ async def chat(request: ChatRequest):
             
         state["selected_mode"] = selected_mode
 
+        # ── Helper for Deep Mode Execution ────────────────
+        async def execute_deep_mode(current_state: GraphState):
+            # LangGraph astream yields events as each node completes
+            async for output in deep_mode_graph.astream(current_state):
+                for node_name, state_update in output.items():
+                    if node_name in DEEP_NODE_MESSAGES:
+                        yield sse_event({"type": "status", "value": DEEP_NODE_MESSAGES[node_name]})
+                    
+                    # Merge state updates locally so we can track the final answer
+                    current_state.update(state_update)
+            
+            # Streaming the final answer struct
+            yield sse_event({
+                "type": "final",
+                "answer": current_state.get("final_answer") or current_state.get("draft_answer", "I couldn't find an answer to your question."),
+                "evidence": current_state.get("evidence", []),
+                "confidence_score": current_state.get("confidence_score", 0.0),
+                "reasoning_summary": current_state.get("reasoning_summary", "")
+            })
+
         # ── Step 3: Run Selected Pipeline ────────────────
         if selected_mode == "fast":
             safety_net_triggered = False
@@ -118,13 +153,14 @@ async def chat(request: ChatRequest):
                 # ── Safety Net: Run Deep Mode ────────────────
                 yield sse_event({"type": "status", "value": "Information not found locally. Upgrading to Deep Search... 🧠"})
                 state["selected_mode"] = "deep"
-                yield sse_event({"type": "status", "value": "(Deep Mode implementation coming in Step 8)"})
-                # TODO: async for event in run_deep_mode(state): yield event
+                
+                async for event in execute_deep_mode(state):
+                    yield event
                 
         else:
-            # ── Deep Mode Placeholder ────────────────
-            yield sse_event({"type": "status", "value": "(Deep Mode implementation coming in Step 8)"})
-            # TODO: async for event in run_deep_mode(state): yield event
+            # ── Run Deep Mode ────────────────
+            async for event in execute_deep_mode(state):
+                yield event
 
     return StreamingResponse(
         event_stream(),
