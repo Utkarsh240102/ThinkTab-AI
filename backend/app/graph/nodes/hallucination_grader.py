@@ -140,6 +140,13 @@ Write a clean, accurate answer using only the context above:""")
 
     print(f"[Revise Answer] Revision complete. New draft length: {len(revised_draft)} chars")
 
+    # Guard: if the LLM returns an empty string, keep the original draft
+    # to avoid falsely passing hallucination check on an empty string and
+    # triggering an infinite usefulness loop.
+    if not revised_draft:
+        print("[Revise Answer] WARNING: LLM returned empty string. Keeping previous draft.")
+        revised_draft = state.get("draft_answer", "")
+
     return {
         **state,
         "draft_answer": revised_draft,
