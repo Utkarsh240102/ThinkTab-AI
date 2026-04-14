@@ -66,11 +66,10 @@ def check_usefulness(state: GraphState) -> GraphState:
             **state,
             "is_useful": True,               # Force exit the retrieval loop
             "final_answer": draft_answer,
-            # IMPORTANT: Use min() not max() here.
-            # max(0.85, 0.30) = 0.85 → falsely reports HIGH confidence for an
-            # answer that failed all retrieval validation cycles!
-            # min(0.85, 0.35) = 0.35 → correctly caps at LOW confidence.
-            "confidence_score": min(state.get("confidence_score") or 0.0, 0.35),
+            # ── BUG FIX: Use constant 0.35, not min(score or 0.0, 0.35)
+            # min(0.0 or 0.0, 0.35) = min(0.0, 0.35) = 0.0 because 0.0 is falsy in Python
+            # The safety guard should ALWAYS signal low confidence (0.35), not 0.0
+            "confidence_score": 0.35,
             "reasoning_summary": f"Answer accepted after {retrieval_retries} retrieval attempts. Confidence is low."
         }
 

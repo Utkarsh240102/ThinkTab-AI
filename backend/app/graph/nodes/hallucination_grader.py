@@ -62,7 +62,7 @@ def check_hallucination(state: GraphState) -> GraphState:
         return {
             **state,
             "is_supported": True,            # Force exit the revision loop
-            "confidence_score": 0.35,        # Flag low confidence to the frontend
+            "confidence_score": 0.35,        # Always 0.35 at safety guard — constant low-confidence signal
             "reasoning_summary": f"Answer accepted after {revision_retries} revision attempts. Confidence is low."
         }
 
@@ -135,6 +135,7 @@ USER'S QUESTION: {query}
 Write a clean, accurate answer using only the context above:""")
     ]
 
+    response = smart_llm.invoke(messages)
     # Cast response.content to string to prevent Union errors if the message returns structured chunks
     revised_draft = str(response.content).strip()
 

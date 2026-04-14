@@ -4,13 +4,41 @@ from langchain_core.documents import Document
 
 from app.graph.state import GraphState
 from app.services.llm_service import fast_llm
-from app.core.config import settings
 
 # Initialize the Tavily Web Search Tool (new langchain_tavily package)
 web_search_tool = TavilySearch(
     max_results=5,
     topic="general",
 )
+
+def _normalise_tavily(raw) -> list:
+    """
+    Normalise all output formats that TavilySearch.invoke() may return:
+      - str  → single large block  (new langchain_tavily default)
+      - list[dict] → [{"url": ..., "content": ...}, ...]  (old format)
+      - list[str]  → plain text snippets without metadata
+    Always returns a list of {"url": str, "content": str} dicts.
+    """
+    # DEBUG: print raw type so we can track Tavily format changes
+    print(f"[Tavily] Raw response type: {type(raw).__name__}")
+    if isinstance(raw, str):
+        print(f"[Tavily] String preview: {raw[:400]}")
+    elif isinstance(raw, list) and raw:
+        print(f"[Tavily] List length: {len(raw)}, first item type: {type(raw[0]).__name__}")
+
+    if isinstance(raw, str):
+        # The entire result is one formatted text blob — treat it as one snippet
+        return [{"url": "web_tavily", "content": raw}] if raw.strip() else []
+    if isinstance(raw, list):
+        normalised = []
+        for item in raw:
+            if isinstance(item, dict):
+                normalised.append(item)
+            elif isinstance(item, str) and item.strip():
+                normalised.append({"url": "web_tavily", "content": item})
+        return normalised
+    return []
+
 
 # System Prompt for the Web Query Rewriter
 REWRITE_SYSTEM_PROMPT = """You are a master SEO specialist. 
@@ -52,7 +80,7 @@ Optimized Search String:"""
     ]
     
     response = fast_llm.invoke(messages)
-    optimized_query = response.content.strip().strip('"').strip("'")
+    optimized_query = str(response.content).strip().strip('"').strip("'")
     
     print(f"[Web Search] Optimized Query: '{optimized_query}'")
     
@@ -75,31 +103,34 @@ def search_web(state: GraphState) -> GraphState:
     print(f"[Web Search] Searching Tavily for: '{search_query}'...")
     
     try:
-        # returns [{ "url": "...", "content": "..." }, ...]
-        tavily_results = web_search_tool.invoke({"query": search_query})
+        # TavilySearch (langchain_tavily) may return either:
+        #   - A raw formatted STRING  (new default behaviour)
+        #   - A LIST of dicts:  [{"url": "...", "content": "..."}, ...]
+        #   - A LIST of strings (some older patch versions)
+        # We normalise all three to [{"url": str, "content": str}, ...]
+        raw = web_search_tool.invoke({"query": search_query})
+        tavily_results = _normalise_tavily(raw)
     except Exception as e:
         print(f"[Web Search] ERROR: Tavily search failed: {e}")
         tavily_results = []
-        
+
     web_docs = []
-    
+
     for item in tavily_results:
         content = item.get("content", "").strip()
         url = item.get("url", "web_tavily")
-        
+
         if content:
-            # We strictly tag the source_id as "web_tavily" and store the exact URL 
-            # so the UI can later group these under the 🌐 icon
             doc = Document(
                 page_content=content,
                 metadata={"source": "web_tavily", "actual_url": url}
             )
             web_docs.append(doc)
-            
+
     print(f"[Web Search] Recovered {len(web_docs)} web snippets.")
     for i, doc in enumerate(web_docs):
         print(f"  [Web {i+1}] {doc.page_content[:80]}...")
-        
+
     return {
         **state,
         "web_docs": web_docs
