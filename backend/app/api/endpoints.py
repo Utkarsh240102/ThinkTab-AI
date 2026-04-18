@@ -84,8 +84,8 @@ async def chat(request: ChatRequest):
             # ── Guard: Reject empty / whitespace-only queries immediately ──
             if not request.query or not request.query.strip():
                 print("[Endpoint] Empty query received — short-circuiting pipeline.")
-                yield json.dumps({"type": "mode", "value": "Fast Mode ⚡"})
-                yield json.dumps({
+                yield sse_event({"type": "mode", "value": "Fast Mode ⚡"})
+                yield sse_event({
                     "type": "final",
                     "answer": "Please enter a question to get started.",
                     "evidence": [],
