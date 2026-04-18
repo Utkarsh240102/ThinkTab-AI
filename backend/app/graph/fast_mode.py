@@ -73,11 +73,17 @@ async def run_fast_mode(initial_state: GraphState) -> AsyncGenerator[str, None]:
         return f"data: {json.dumps(payload)}\n\n"
 
     # Step 1: Contextualize
+    # Only show the "Understanding question..." status if there is chat history.
+    # With no history the contextualizer skips the LLM call entirely (instant),
+    # so showing a status event would cause a confusing flicker with nothing behind it.
+    if initial_state.get("chat_history"):
+        yield sse("status", {"value": "Understanding question... 🤔"})
     state = contextualize_query(state)
-    
+
     # Step 2: Retrieve & Re-rank
     yield sse("status", {"value": "Retrieving relevant paragraphs... "})
     state = retrieve_and_rerank(state)
+
     
     # Step 3: Fast CRAG Filter
     yield sse("status", {"value": "Filtering out noise... "})
