@@ -27,14 +27,21 @@ class LRUEmbeddingCache:
         # not the source_id, so we need this map to find the right entry to delete)
         self.source_id_to_key: dict[str, str] = {}
 
-    def _make_key(self, content: str) -> str:
+    def _make_key(self, content: str, source_id: str = "") -> str:
         """
-        Generate a unique SHA-256 fingerprint for any given text.
-        Same content → same key. Any change in content → different key.
-        """
-        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+        Generate a unique SHA-256 fingerprint for content + source pairing.
 
-    def get(self, content: str) -> FAISS | None:
+        We include source_id in the hash (not just content) so that two different
+        sources with identical text (e.g., stripe.com/pricing and stripe.com/en-gb/pricing)
+        get SEPARATE cache entries with the correct metadata for each.
+
+        Same content + same source → same key (cache hit, skip re-embedding) ✅
+        Same content + diff source → different key (separate entry, correct citation) ✅
+        """
+        combined = f"{source_id}::{content}"
+        return hashlib.sha256(combined.encode("utf-8")).hexdigest()
+
+    def get(self, content: str, source_id: str = "") -> FAISS | None:
         """
         Check if this content has already been embedded and cached.
 
@@ -42,7 +49,7 @@ class LRUEmbeddingCache:
         On a HIT, we move the entry to the END of the OrderedDict so it is
         treated as the "most recently used" (preventing it from being evicted soon).
         """
-        key = self._make_key(content)
+        key = self._make_key(content, source_id)
 
         if key in self.cache:
             # Move to end = mark as recently used
@@ -60,7 +67,7 @@ class LRUEmbeddingCache:
         If the cache is already full (max_size reached), it evicts the LEAST
         recently used entry (the one at the START of the OrderedDict) first.
         """
-        key = self._make_key(content)
+        key = self._make_key(content, source_id)
 
         # If already cached, just return it (shouldn't normally happen if
         # you call get() first, but this is a safe guard)
@@ -96,7 +103,7 @@ class LRUEmbeddingCache:
             faiss_index = embedding_cache.get_or_embed(page_text, "stripe.com")
             results = faiss_index.similarity_search(query, k=10)
         """
-        cached = self.get(content)
+        cached = self.get(content, source_id)
         if cached is not None:
             return cached
 
