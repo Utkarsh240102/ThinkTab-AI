@@ -1,56 +1,82 @@
+import requests
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_tavily import TavilySearch
 from langchain_core.documents import Document
 
 from app.graph.state import GraphState
 from app.services.llm_service import fast_llm
+from app.core.config import settings
 
-# Initialize the Tavily Web Search Tool (new langchain_tavily package)
-web_search_tool = TavilySearch(
-    max_results=5,
-    topic="general",
-)
+# ─────────────────────────────────────────────────────────────
+# Serper Google Search — direct HTTP, no extra library required
+# ─────────────────────────────────────────────────────────────
+SERPER_ENDPOINT = "https://google.serper.dev/search"
 
-def _normalise_tavily(raw) -> list:
+
+def _search_serper(query: str, num_results: int = 5) -> list:
     """
-    Normalise all output formats that TavilySearch.invoke() may return:
-      - dict  → {"query": ..., "results": [{"url": ..., "content": ...}]}  ← ACTUAL format
-      - list[dict] → [{"url": ..., "content": ...}]
-      - str  → single large text blob (legacy/agent format)
-    Always returns a list of {"url": str, "content": str} dicts.
+    Call the Serper Google Search API and return a normalised list of
+    {"url": str, "content": str} dicts ready for the RAG pipeline.
+
+    Priority order of extracted snippets:
+    1. answerBox  — direct fact from Google's featured snippet (highest quality)
+    2. knowledgeGraph — structured entity description
+    3. organic results — standard search-result snippets
     """
-    # DEBUG: print raw type so we can track Tavily format changes
-    print(f"[Tavily] Raw response type: {type(raw).__name__}")
-    if isinstance(raw, dict):
-        # Check for API error response first
-        if "error" in raw:
-            print(f"[Tavily] ❌ API ERROR: {raw['error']}")
-            print(f"[Tavily] ❌ Check your TAVILY_API_KEY in .env — the key may be missing, invalid or expired.")
-            return []
-        # Standard TavilySearch response: {"query": "...", "results": [...], "answer": "..."}
-        print(f"[Tavily] Dict keys: {list(raw.keys())}")
-        inner = raw.get("results", [])
-        print(f"[Tavily] Found {len(inner)} results in 'results' key")
-        return _normalise_tavily(inner)  # recurse to handle the list inside
-    if isinstance(raw, str):
-        print(f"[Tavily] String preview: {raw[:400]}")
-        return [{"url": "web_tavily", "content": raw}] if raw.strip() else []
-    if isinstance(raw, list):
-        if raw:
-            print(f"[Tavily] List length: {len(raw)}, first item type: {type(raw[0]).__name__}")
-        normalised = []
-        for item in raw:
-            if isinstance(item, dict):
-                normalised.append(item)
-            elif isinstance(item, str) and item.strip():
-                normalised.append({"url": "web_tavily", "content": item})
-        return normalised
-    print(f"[Tavily] Unhandled type: {type(raw).__name__} — returning empty")
-    return []
+    api_key = settings.SERPER_API_KEY
+    if not api_key:
+        print("[Serper] ❌ SERPER_API_KEY is not set in .env — web search disabled.")
+        return []
+
+    headers = {
+        "X-API-KEY": api_key,
+        "Content-Type": "application/json",
+    }
+    payload = {"q": query, "num": num_results}
+
+    try:
+        resp = requests.post(SERPER_ENDPOINT, headers=headers, json=payload, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"[Serper] ❌ Request failed: {e}")
+        return []
+
+    results: list = []
+
+    # 1. Answer Box — Google's featured snippet / direct answer
+    ab = data.get("answerBox", {})
+    if ab:
+        text = ab.get("snippet") or ab.get("answer") or ""
+        if text:
+            results.append({
+                "url": ab.get("link", "google_answer_box"),
+                "content": text
+            })
+            print(f"[Serper] ✅ Answer Box: {text[:100]}")
+
+    # 2. Knowledge Graph — entity description  
+    kg = data.get("knowledgeGraph", {})
+    if kg.get("description"):
+        results.append({
+            "url": kg.get("descriptionLink", "google_knowledge_graph"),
+            "content": kg["description"]
+        })
+
+    # 3. Organic search results — up to num_results snippets
+    for item in data.get("organic", []):
+        snippet = item.get("snippet", "").strip()
+        url = item.get("link", "web_serper")
+        if snippet:
+            results.append({"url": url, "content": snippet})
+
+    print(f"[Serper] Found {len(results)} total snippets")
+    return results
 
 
+# ─────────────────────────────────────────────────────────────
 # System Prompt for the Web Query Rewriter
-REWRITE_SYSTEM_PROMPT = """You are a master SEO specialist. 
+# ─────────────────────────────────────────────────────────────
+REWRITE_SYSTEM_PROMPT = """You are a master SEO specialist.
 Your job is to rewrite a conversational user question into a dense, keyword-rich search query optimized for an internet search engine like Google.
 
 RULES:
@@ -59,22 +85,25 @@ RULES:
 3. Use conversation history (if provided) to resolve any vague pronouns (it, they, that company) into explicit names.
 4. Output ONLY the optimized search string. Do not include quotes, explanations, or preamble."""
 
+
 def rewrite_for_web(state: GraphState) -> GraphState:
     """
     Deep Mode Node: Web Query Rewriter
-    
-    Takes the user's conversational query and history, and distills it 
-    into a powerful, keyword-heavy search string for the Tavily API.
+
+    Takes the user's conversational query and history, and distils it
+    into a powerful, keyword-heavy search string for the Serper API.
     """
     original_query = state["query"]
     chat_history = state.get("chat_history", [])
-    
+
     print(f"[Web Search] Rewriting query for search engine: '{original_query}'")
-    
-    # We only include the last 4 messages to keep the prompt laser-focused
+
     recent_history = chat_history[-4:]
-    history_text = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in recent_history])
-    
+    history_text = "\n".join([
+        f"{msg['role'].capitalize()}: {msg['content']}"
+        for msg in recent_history
+    ])
+
     prompt = f"""Conversation history:
 {history_text}
 
@@ -87,12 +116,12 @@ Optimized Search String:"""
         SystemMessage(content=REWRITE_SYSTEM_PROMPT),
         HumanMessage(content=prompt)
     ]
-    
+
     response = fast_llm.invoke(messages)
     optimized_query = str(response.content).strip().strip('"').strip("'")
-    
+
     print(f"[Web Search] Optimized Query: '{optimized_query}'")
-    
+
     return {
         **state,
         "web_query": optimized_query
@@ -101,44 +130,38 @@ Optimized Search String:"""
 
 def search_web(state: GraphState) -> GraphState:
     """
-    Deep Mode Node: Tavily Web Search
-    
-    Executes a search against the live internet using the optimized string.
-    Maps the returned JSON snippets into LangChain Document objects, tagging
+    Deep Mode Node: Serper (Google) Web Search
+
+    Executes a Google search via the Serper API using the optimised query.
+    Maps the returned snippets into LangChain Document objects, tagging
     them identically to local webpage chunks so the generator can cite them.
     """
     search_query = state.get("web_query", state["query"])
-    
-    print(f"[Web Search] Searching Tavily for: '{search_query}'...")
-    
+
+    print(f"[Web Search] Searching Serper (Google) for: '{search_query}'...")
+
     try:
-        # TavilySearch (langchain_tavily) may return either:
-        #   - A raw formatted STRING  (new default behaviour)
-        #   - A LIST of dicts:  [{"url": "...", "content": "..."}, ...]
-        #   - A LIST of strings (some older patch versions)
-        # We normalise all three to [{"url": str, "content": str}, ...]
-        raw = web_search_tool.invoke({"query": search_query})
-        tavily_results = _normalise_tavily(raw)
+        raw_results = _search_serper(search_query, num_results=5)
     except Exception as e:
-        print(f"[Web Search] ERROR: Tavily search failed: {e}")
-        tavily_results = []
+        print(f"[Web Search] ERROR: Search failed: {e}")
+        raw_results = []
 
     web_docs = []
 
-    for item in tavily_results:
+    for item in raw_results:
         content = item.get("content", "").strip()
-        url = item.get("url", "web_tavily")
+        url = item.get("url", "web_serper")
 
         if content:
             doc = Document(
                 page_content=content,
-                metadata={"source": "web_tavily", "actual_url": url}
+                metadata={"source": "web_serper", "actual_url": url}
             )
             web_docs.append(doc)
 
     print(f"[Web Search] Recovered {len(web_docs)} web snippets.")
     for i, doc in enumerate(web_docs):
-        print(f"  [Web {i+1}] {doc.page_content[:80]}...")
+        print(f"  [Web {i+1}] ({doc.metadata['actual_url'][:60]}) {doc.page_content[:80]}...")
 
     return {
         **state,
