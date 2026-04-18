@@ -14,22 +14,30 @@ web_search_tool = TavilySearch(
 def _normalise_tavily(raw) -> list:
     """
     Normalise all output formats that TavilySearch.invoke() may return:
-      - str  → single large block  (new langchain_tavily default)
-      - list[dict] → [{"url": ..., "content": ...}, ...]  (old format)
-      - list[str]  → plain text snippets without metadata
+      - dict  → {"query": ..., "results": [{"url": ..., "content": ...}]}  ← ACTUAL format
+      - list[dict] → [{"url": ..., "content": ...}]
+      - str  → single large text blob (legacy/agent format)
     Always returns a list of {"url": str, "content": str} dicts.
     """
     # DEBUG: print raw type so we can track Tavily format changes
     print(f"[Tavily] Raw response type: {type(raw).__name__}")
+    if isinstance(raw, dict):
+        # Check for API error response first
+        if "error" in raw:
+            print(f"[Tavily] ❌ API ERROR: {raw['error']}")
+            print(f"[Tavily] ❌ Check your TAVILY_API_KEY in .env — the key may be missing, invalid or expired.")
+            return []
+        # Standard TavilySearch response: {"query": "...", "results": [...], "answer": "..."}
+        print(f"[Tavily] Dict keys: {list(raw.keys())}")
+        inner = raw.get("results", [])
+        print(f"[Tavily] Found {len(inner)} results in 'results' key")
+        return _normalise_tavily(inner)  # recurse to handle the list inside
     if isinstance(raw, str):
         print(f"[Tavily] String preview: {raw[:400]}")
-    elif isinstance(raw, list) and raw:
-        print(f"[Tavily] List length: {len(raw)}, first item type: {type(raw[0]).__name__}")
-
-    if isinstance(raw, str):
-        # The entire result is one formatted text blob — treat it as one snippet
         return [{"url": "web_tavily", "content": raw}] if raw.strip() else []
     if isinstance(raw, list):
+        if raw:
+            print(f"[Tavily] List length: {len(raw)}, first item type: {type(raw[0]).__name__}")
         normalised = []
         for item in raw:
             if isinstance(item, dict):
@@ -37,6 +45,7 @@ def _normalise_tavily(raw) -> list:
             elif isinstance(item, str) and item.strip():
                 normalised.append({"url": "web_tavily", "content": item})
         return normalised
+    print(f"[Tavily] Unhandled type: {type(raw).__name__} — returning empty")
     return []
 
 
