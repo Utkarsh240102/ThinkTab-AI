@@ -1,26 +1,223 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════
+   ThinkTab AI — Global Design System
+   All design tokens and utilities are defined here so
+   every component in the app uses the same values.
+   ═══════════════════════════════════════════════════════ */
+
+/* ── 1. Google Font: Inter ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ── 2. CSS Custom Properties (Design Tokens) ── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Background — deep animated dark gradient */
+  --bg-primary:   #0d0d1a;   /* Near-black with a blue tint */
+  --bg-secondary: #111827;   /* Slightly lighter for layering */
+
+  /* Accent Colors — vibrant purple/blue palette */
+  --accent-primary:   #6366f1; /* Indigo-500  — primary buttons */
+  --accent-secondary: #8b5cf6; /* Violet-500  — hover states   */
+  --accent-glow:      #4f46e5; /* Indigo-600  — glow effects   */
+  --accent-cyan:      #06b6d4; /* Cyan-500    — highlights     */
+
+  /* Glass Panel — the heart of the Glassmorphism look */
+  --glass-bg:      rgba(255, 255, 255, 0.05);  /* Very subtle white fill */
+  --glass-border:  rgba(255, 255, 255, 0.12);  /* Faint white border     */
+  --glass-blur:    16px;                        /* Backdrop blur amount   */
+  --glass-shadow:  0 8px 32px rgba(0, 0, 0, 0.4); /* Deep drop shadow    */
+
+  /* Text */
+  --text-primary:   #f1f5f9; /* Slate-100 — main readable text */
+  --text-secondary: #94a3b8; /* Slate-400 — muted labels       */
+  --text-accent:    #a5b4fc; /* Indigo-300 — accent text       */
+
+  /* Status Colors — for pipeline status events */
+  --status-thinking: #f59e0b; /* Amber  */
+  --status-success:  #10b981; /* Emerald */
+  --status-error:    #ef4444; /* Red     */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── 3. Base Styles ── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html,
+body {
+  height: 100%;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── 4. Animated Background Orbs ── */
+/* These are large blurry gradient circles positioned
+   behind everything. They create the rich colour depth
+   that makes glass panels look stunning. */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  z-index: -1;           /* Always behind all content */
+  pointer-events: none;  /* Never intercept clicks    */
+}
+
+/* Top-left purple orb */
+body::before {
+  width: 600px;
+  height: 600px;
+  top: -200px;
+  left: -200px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%);
+  animation: orb-drift-1 18s ease-in-out infinite alternate;
+}
+
+/* Bottom-right cyan orb */
+body::after {
+  width: 500px;
+  height: 500px;
+  bottom: -150px;
+  right: -150px;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.2) 0%, transparent 70%);
+  animation: orb-drift-2 22s ease-in-out infinite alternate;
+}
+
+/* ── 5. Keyframe Animations ── */
+
+/* Orbs slowly drift to create a living, breathing background */
+@keyframes orb-drift-1 {
+  from { transform: translate(0, 0) scale(1);     }
+  to   { transform: translate(60px, 80px) scale(1.15); }
+}
+
+@keyframes orb-drift-2 {
+  from { transform: translate(0, 0) scale(1);     }
+  to   { transform: translate(-50px, -60px) scale(1.1); }
+}
+
+/* Smooth fade-in for messages and panels appearing */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Gentle pulse used for the "thinking" status dots */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50%       { opacity: 1;   transform: scale(1);    }
 }
+
+/* Slide-in from the right for the sidebar panel */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* ── 6. Reusable CSS Utility Classes ── */
+/* These are applied directly to JSX elements as className="" */
+
+/* The core Glass Panel — used everywhere */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur)); /* Safari support */
+  box-shadow: var(--glass-shadow);
+  border-radius: 16px;
+}
+
+/* A slightly stronger glass for important panels */
+.glass-strong {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-radius: 16px;
+}
+
+/* Gradient text — used for titles and emphasis */
+.gradient-text {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-primary) 50%, var(--accent-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glowing primary button */
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.6);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Subtle ghost button (secondary actions) */
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-ghost:hover {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+/* Animation utility classes */
+.animate-fade-in-up {
+  animation: fade-in-up 0.35s ease-out both;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Thinking dots for status events */
+.thinking-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-thinking);
+  animation: pulse-soft 1.4s ease-in-out infinite;
+}
+
+.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Custom scrollbar — matches dark theme */
+::-webkit-scrollbar        { width: 4px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.15); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
