@@ -235,8 +235,17 @@ async def clear_cache(source_id: str):
     """
     DELETE /api/cache/{source_id}
 
-    Manually evict a specific source from the embedding cache.
+    Evicts a specific source from the embedding cache so the next query
+    will re-embed fresh content. Called by the Chrome Extension when a
+    page is updated and the old embedding needs to be invalidated.
     """
-    # For now, just return a success message.
-    # Full eviction logic will be added when needed.
+    from app.services.vector_store import embedding_cache
+    from fastapi import HTTPException
+
+    evicted = embedding_cache.delete_by_source_id(source_id)
+    if not evicted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Source '{source_id}' not found in cache. It may not have been embedded yet."
+        )
     return {"status": "evicted", "source_id": source_id}

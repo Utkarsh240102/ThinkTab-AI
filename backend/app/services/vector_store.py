@@ -22,6 +22,10 @@ class LRUEmbeddingCache:
         # OrderedDict remembers insertion/access order — perfect for LRU!
         self.cache: OrderedDict[str, FAISS] = OrderedDict()
         self.max_size = max_size or settings.MAX_CACHE_PAGES  # Default: 20
+        # Reverse lookup: source_id → content hash key
+        # Needed so we can evict by source_id (the cache key is a content hash,
+        # not the source_id, so we need this map to find the right entry to delete)
+        self.source_id_to_key: dict[str, str] = {}
 
     def _make_key(self, content: str) -> str:
         """
@@ -68,11 +72,16 @@ class LRUEmbeddingCache:
         if len(self.cache) >= self.max_size:
             evicted_key, _ = self.cache.popitem(last=False)  # Remove from START (oldest)
             print(f"[Cache EVICT] Cache full ({self.max_size} pages). Removed oldest entry {evicted_key[:8]}...")
+            # Also clean up the reverse lookup so it doesn't grow unbounded
+            self.source_id_to_key = {
+                sid: k for sid, k in self.source_id_to_key.items() if k != evicted_key
+            }
 
         # Embed the new content and store it
         print(f"[Cache SET] Embedding new content for source '{source_id}'...")
         faiss_index = chunk_and_embed(content, source_id)
         self.cache[key] = faiss_index
+        self.source_id_to_key[source_id] = key  # Register in reverse lookup
 
         return faiss_index
 
@@ -92,6 +101,26 @@ class LRUEmbeddingCache:
             return cached
 
         return self.set(content, source_id)
+
+    def delete_by_source_id(self, source_id: str) -> bool:
+        """
+        Evict a specific source from the cache by its source_id.
+
+        Returns True if the entry was found and evicted, False if not found.
+
+        This is called by DELETE /api/cache/{source_id} so the Chrome Extension
+        can force-refresh a page when its content has changed.
+        """
+        key = self.source_id_to_key.get(source_id)
+        if key is None:
+            print(f"[Cache DELETE] source_id '{source_id}' not found in cache.")
+            return False
+
+        if key in self.cache:
+            del self.cache[key]
+        del self.source_id_to_key[source_id]
+        print(f"[Cache DELETE] Evicted '{source_id}' (hash {key[:8]}...) from cache.")
+        return True
 
     @property
     def size(self) -> int:
