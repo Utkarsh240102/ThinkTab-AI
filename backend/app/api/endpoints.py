@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from app.graph.state import GraphState
 from app.graph.fast_mode import run_fast_mode
@@ -46,7 +46,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """The full request body sent by the Chrome Extension."""
     query: str
-    mode: str = "auto"      # "fast", "deep", or "auto"
+    mode: Literal["fast", "deep", "auto"] = "auto"  # Validated: rejects anything else with 422
     contexts: List[ContextItem] = []
     chat_history: Optional[List[ChatMessage]] = []
 
