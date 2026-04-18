@@ -81,6 +81,7 @@ def crag_refiner(state: GraphState) -> GraphState:
     refined_sentences = [all_sentences[i] for i in keep_indices if i < len(all_sentences)]
     
     print(f"[CRAG Refiner] Kept {len(refined_sentences)} out of {len(all_sentences)} sentences.")
+    print(f"[CRAG Refiner] Keep indices from LLM: {keep_indices}")
     
     # Group sentences by their source so the final generator knows where they came from
     from typing import Dict, List

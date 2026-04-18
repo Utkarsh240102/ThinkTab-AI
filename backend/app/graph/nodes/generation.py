@@ -132,6 +132,7 @@ def generate_deep(state: GraphState) -> GraphState:
         }
 
     print(f"[Generation - Deep] Generating draft from {len(refined_context)} chars of refined context...")
+    print(f"[Generation - Deep] Context preview: {refined_context[:300]}")
 
     messages = [
         SystemMessage(content=GENERATOR_SYSTEM_PROMPT),
