@@ -55,7 +55,7 @@ class GraphState(TypedDict):
     # The rewritten, Google-friendly search query (set after CRAG verdict is INCORRECT/AMBIGUOUS)
 
     web_docs: Optional[List]
-    # Documents fetched from Tavily web search, tagged with source_id="web_tavily"
+    # Documents fetched from Serper (Google) web search, tagged with source="web_serper"
 
     # ─── Generation Fields ────────────────────────────────────────────────────
     draft_answer: Optional[str]

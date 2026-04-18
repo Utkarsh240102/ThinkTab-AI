@@ -84,29 +84,21 @@ async def run_fast_mode(initial_state: GraphState) -> AsyncGenerator[str, None]:
     yield sse("status", {"value": "Retrieving relevant paragraphs... "})
     state = retrieve_and_rerank(state)
 
-    
     # Step 3: Fast CRAG Filter
     yield sse("status", {"value": "Filtering out noise... "})
     state = batch_crag_filter(state)
-    
+
     # Step 4: Generate Answer
     yield sse("status", {"value": "Writing answer... "})
     state = generate_fast(state)
-    
-    # Check Safety Net for upgrade
-    final_ans = state.get("final_answer") or ""
-    if final_ans.strip().lower() == "i cannot find the answer on this page.":
-        print("[Fast Mode] Safety net triggered: Information not found -> Upgrading to Deep Mode")
-        # Note: endpoints.py handles the "Upgrading to Deep Search" status message
-        # to avoid showing it twice in the UI
-        
-        # In a full implementation, you would trigger Deep Mode here.
-        # For now, we return the Fast Mode failure gracefully.
-        
+
+    # Always yield the final event.
+    # Safety-net detection (answer == "I cannot find the answer on this page.")
+    # is handled in endpoints.py — it intercepts this event and upgrades to Deep Mode
+    # instead of forwarding this failure response to the frontend.
     yield sse("final", {
         "answer": state.get("final_answer", ""),
         "evidence": state.get("evidence", []),
         "confidence_score": state.get("confidence_score", 0.0),
         "reasoning_summary": state.get("reasoning_summary", "")
     })
-

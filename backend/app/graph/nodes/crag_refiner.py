@@ -1,6 +1,6 @@
 import re
 from pydantic import BaseModel, Field
-from typing import List
+from typing import Dict, List
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.graph.state import GraphState
@@ -84,7 +84,6 @@ def crag_refiner(state: GraphState) -> GraphState:
     print(f"[CRAG Refiner] Keep indices from LLM: {keep_indices}")
     
     # Group sentences by their source so the final generator knows where they came from
-    from typing import Dict, List
     source_map: Dict[str, List[str]] = {}
     for s_dict in refined_sentences:
         src = s_dict["source"]
