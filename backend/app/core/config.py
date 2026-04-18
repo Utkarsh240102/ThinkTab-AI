@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     FAST_MODE_RETRIEVE_K: int = 10   # How many chunks FAISS fetches initially
     FAST_MODE_RERANK_TOP_K: int = 5  # How many chunks survive after re-ranking
 
+    # Deep Mode Retrieval Settings
+    DEEP_MODE_RETRIEVE_K: int = 15   # Fetch more chunks for deep analysis
+    DEEP_MODE_RERANK_TOP_K: int = 8  # Keep more chunks to feed into CRAG batch evaluator
+
     class Config:
         env_file = "../../../.env"
         extra = "ignore"

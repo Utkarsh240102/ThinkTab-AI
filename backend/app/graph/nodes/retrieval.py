@@ -41,6 +41,17 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
 
     query = state["query"]
     contexts = state["contexts"]
+    
+    # Determine which mode we are actually running in ("fast" or "deep")
+    # If mode is "auto", the auto_router will have populated "selected_mode"
+    actual_mode = state.get("selected_mode") or state.get("mode")
+    
+    if actual_mode == "deep":
+        retrieve_k = settings.DEEP_MODE_RETRIEVE_K
+        rerank_top_k = settings.DEEP_MODE_RERANK_TOP_K
+    else:
+        retrieve_k = settings.FAST_MODE_RETRIEVE_K
+        rerank_top_k = settings.FAST_MODE_RERANK_TOP_K
 
     all_docs: list[Document] = []
 
@@ -60,10 +71,10 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         # get_or_embed: returns cached FAISS index or embeds fresh
         faiss_index = embedding_cache.get_or_embed(content, source_id)
 
-        # Retrieve top K candidates (default: 10 from config)
+        # Retrieve top K candidates dynamically based on mode
         raw_docs = faiss_index.similarity_search(
             query,
-            k=settings.FAST_MODE_RETRIEVE_K
+            k=retrieve_k
         )
 
         print(f"[Retrieval] Retrieved {len(raw_docs)} raw chunks from {source_id}")
@@ -90,8 +101,8 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         reverse=True
     )
 
-    # Keep only the top N after re-ranking (default: 5 from config)
-    top_docs = [doc for _, doc in scored_docs[:settings.FAST_MODE_RERANK_TOP_K]]
+    # Keep only the top N after re-ranking dynamically based on mode
+    top_docs = [doc for _, doc in scored_docs[:rerank_top_k]]
 
     print(f"[Retrieval] Kept top {len(top_docs)} chunks after re-ranking.")
     for i, doc in enumerate(top_docs):

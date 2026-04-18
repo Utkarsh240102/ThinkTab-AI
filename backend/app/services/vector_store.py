@@ -11,7 +11,7 @@ class LRUEmbeddingCache:
 
     How it works:
     - Stores up to `max_size` FAISS indexes in memory (default: 20).
-    - Uses the SHA-256 hash of the page content as the unique cache key.
+    - Uses the SHA-256 hash of `source_id + "::" + content` as the cache key.
     - When the cache is full, it silently deletes the index that was
       least recently accessed to make room for the new one.
     - If the same page content is seen again, we skip re-embedding and
