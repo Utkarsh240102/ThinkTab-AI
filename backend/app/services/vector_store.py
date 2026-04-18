@@ -84,6 +84,15 @@ class LRUEmbeddingCache:
                 sid: k for sid, k in self.source_id_to_key.items() if k != evicted_key
             }
 
+        # ── Evict the OLD entry for this source_id if the content has changed ──
+        # Without this, updating a page creates a ghost entry in the cache:
+        #   Old key stays in self.cache (wasting a slot) even though source_id_to_key
+        #   now points to the new key. Over time, ghosts can fill up to 50% of the cache.
+        old_key = self.source_id_to_key.get(source_id)
+        if old_key and old_key != key and old_key in self.cache:
+            del self.cache[old_key]
+            print(f"[Cache UPDATE] Content changed for '{source_id}'. Evicted stale entry {old_key[:8]}...")
+
         # Embed the new content and store it
         print(f"[Cache SET] Embedding new content for source '{source_id}'...")
         faiss_index = chunk_and_embed(content, source_id)
@@ -91,6 +100,7 @@ class LRUEmbeddingCache:
         self.source_id_to_key[source_id] = key  # Register in reverse lookup
 
         return faiss_index
+
 
     def get_or_embed(self, content: str, source_id: str) -> FAISS:
         """
