@@ -19,4 +19,13 @@ export default defineConfig({
       },
     },
   },
+
+  /* ── Chrome Extension Build Setup ── */
+  // Forces Vite to use relative paths (e.g. ./assets/styles.css) 
+  // instead of absolute paths (/assets/styles.css) which completely breaks Chrome Extensions.
+  base: './',
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+  }
 })
