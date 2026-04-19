@@ -50,7 +50,7 @@ export interface ChatHistoryItem {
 
 /* In dev: requests go through Vite proxy → localhost:8000
    In production (Chrome Extension): swap this to the real backend URL */
-const BACKEND_URL = "";
+const BACKEND_URL = "http://127.0.0.1:8000";
 
 export function useSSEChat() {
   const [isLoading,   setIsLoading]   = useState(false);
