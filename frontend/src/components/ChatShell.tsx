@@ -129,12 +129,7 @@ export default function ChatShell() {
         {/* 1. Header — shows mode reported by backend */}
         <Header activeMode={displayMode} />
 
-        {/* 2. Mode selector */}
-        <ModeSelector
-          selected={selectedMode}
-          onChange={setSelectedMode}
-          disabled={isLoading}
-        />
+        {/* 2. Mode selector removed from here — now lives in the bottom toolbar */}
 
         {/* 3. Message area */}
         <main style={{ flex: 1, overflowY: "auto", padding: "12px 16px 16px" }}>
@@ -216,13 +211,30 @@ export default function ChatShell() {
           )}
         </main>
 
-        {/* 4. Input */}
-        <QueryInput
-          value={query}
-          onChange={setQuery}
-          onSubmit={handleSubmit}
-          isLoading={isLoading}
-        />
+        {/* 4. Bottom section — mode trigger + input (position:relative anchors the popup) */}
+        <div style={{ position: "relative" }}>
+          {/* Toolbar row: mode selector trigger */}
+          <div style={{
+            display:        "flex",
+            alignItems:     "center",
+            padding:        "8px 16px 0",
+            borderTop:      "1px solid var(--glass-border)",
+          }}>
+            <ModeSelector
+              selected={selectedMode}
+              onChange={setSelectedMode}
+              disabled={isLoading}
+            />
+          </div>
+
+          {/* Input textarea */}
+          <QueryInput
+            value={query}
+            onChange={setQuery}
+            onSubmit={handleSubmit}
+            isLoading={isLoading}
+          />
+        </div>
       </div>
     </div>
   );

@@ -29,8 +29,7 @@ export default function QueryInput({ value, onChange, onSubmit, isLoading }: Que
 
   return (
     <div style={{
-      padding: "12px 16px",
-      borderTop: "1px solid var(--glass-border)",
+      padding: "8px 16px 12px",
       flexShrink: 0,
     }}>
       {/* Input row */}
