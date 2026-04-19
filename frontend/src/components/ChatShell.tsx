@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import Header from "./Header";
 import EmptyState from "./EmptyState";
 import QueryInput from "./QueryInput";
+import ModeSelector, { type Mode } from "./ModeSelector";
 
 interface Message {
   id: string;
@@ -10,10 +11,11 @@ interface Message {
 }
 
 export default function ChatShell() {
-  const [query, setQuery]         = useState("");
-  const [messages, setMessages]   = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeMode, setActiveMode] = useState<string | undefined>(undefined);
+  const [query, setQuery]             = useState("");
+  const [messages, setMessages]       = useState<Message[]>([]);
+  const [isLoading, setIsLoading]     = useState(false);
+  const [selectedMode, setSelectedMode] = useState<Mode>("auto");   // ← user's chosen mode
+  const [displayMode, setDisplayMode]   = useState<string | undefined>(undefined); // ← what backend tells us it used
   const bottomRef = useRef<HTMLDivElement>(null);
 
   /* Auto-scroll to latest message */
@@ -21,7 +23,8 @@ export default function ChatShell() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  /* STUB — will be replaced with real SSE hook in Step 11 */
+  /* STUB — will be replaced with real SSE hook in Step 11.
+     `selectedMode` will be sent to the backend as the `mode` field. */
   function handleSubmit() {
     if (!query.trim() || isLoading) return;
 
@@ -29,13 +32,20 @@ export default function ChatShell() {
     setMessages((prev) => [...prev, userMsg]);
     setQuery("");
     setIsLoading(true);
-    setActiveMode("Fast Mode ⚡");
+
+    /* Simulate the backend responding with whichever mode was chosen */
+    const modeLabels: Record<Mode, string> = {
+      auto: "Auto → Selected: Fast ⚡",
+      fast: "Fast Mode ⚡",
+      deep: "Deep Mode 🧠",
+    };
+    setDisplayMode(modeLabels[selectedMode]);
 
     setTimeout(() => {
       const assistantMsg: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: "This is a placeholder. Real SSE streaming with the backend will be connected in Sub-step 11. 🚀",
+        content: `[${selectedMode.toUpperCase()} MODE] Placeholder response. Real SSE backend integration in Sub-step 11. 🚀`,
       };
       setMessages((prev) => [...prev, assistantMsg]);
       setIsLoading(false);
@@ -55,11 +65,18 @@ export default function ChatShell() {
         overflow: "hidden",
       }}>
 
-        {/* Header */}
-        <Header activeMode={activeMode} />
+        {/* 1. Header */}
+        <Header activeMode={displayMode} />
 
-        {/* Message area */}
-        <main style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+        {/* 2. Mode Selector — sits just below header */}
+        <ModeSelector
+          selected={selectedMode}
+          onChange={setSelectedMode}
+          disabled={isLoading}
+        />
+
+        {/* 3. Message area */}
+        <main style={{ flex: 1, overflowY: "auto", padding: "12px 16px 16px" }}>
           {messages.length === 0 && !isLoading ? (
             <EmptyState onPromptClick={setQuery} />
           ) : (
@@ -102,13 +119,12 @@ export default function ChatShell() {
                   </div>
                 </div>
               )}
-
               <div ref={bottomRef} />
             </div>
           )}
         </main>
 
-        {/* Input */}
+        {/* 4. Input bar */}
         <QueryInput
           value={query}
           onChange={setQuery}
