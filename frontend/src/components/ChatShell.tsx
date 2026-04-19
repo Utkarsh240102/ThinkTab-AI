@@ -5,6 +5,7 @@ import QueryInput from "./QueryInput";
 import ModeSelector, { type Mode } from "./ModeSelector";
 import StatusBubble from "./StatusBubble";
 import SoftHITLButton from "./SoftHITLButton";
+import EvidenceAccordion from "./EvidenceAccordion";
 import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
 
 // ── Message types ──────────────────────────────────────────────
@@ -179,33 +180,30 @@ export default function ChatShell() {
                         {msg.answer}
                       </div>
 
-                      {/* Evidence chips + confidence badge */}
+                      {/* Evidence Accordion + Confidence badge */}
                       {(msg.evidence.length > 0 || msg.confidence_score > 0) && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingLeft: "4px" }}>
-                          {/* Source chips */}
-                          {msg.evidence.map((ev, i) => (
-                            <span key={i} style={{
-                              fontSize: "11px", padding: "2px 8px",
-                              borderRadius: "99px",
-                              background: "rgba(99,102,241,0.15)",
-                              border: "1px solid rgba(99,102,241,0.3)",
-                              color: "var(--text-accent)",
-                            }}>
-                              📎 {ev.source_id}
-                            </span>
-                          ))}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingLeft: "4px" }}>
+                          
                           {/* Confidence badge */}
                           {msg.confidence_score > 0 && (
-                            <span style={{
-                              fontSize: "11px", padding: "2px 8px",
-                              borderRadius: "99px",
-                              background: `${confidenceColor(msg.confidence_score)}20`,
-                              border: `1px solid ${confidenceColor(msg.confidence_score)}50`,
-                              color: confidenceColor(msg.confidence_score),
-                            }}>
-                              {Math.round(msg.confidence_score * 100)}% confident
-                            </span>
+                            <div style={{ display: "flex" }}>
+                              <span style={{
+                                fontSize: "11px", padding: "2px 8px",
+                                borderRadius: "99px",
+                                background: `${confidenceColor(msg.confidence_score)}20`,
+                                border: `1px solid ${confidenceColor(msg.confidence_score)}50`,
+                                color: confidenceColor(msg.confidence_score),
+                              }}>
+                                {Math.round(msg.confidence_score * 100)}% confident
+                              </span>
+                            </div>
                           )}
+
+                          {/* Collapsible evidence */}
+                          {msg.evidence.length > 0 && (
+                            <EvidenceAccordion evidence={msg.evidence} />
+                          )}
+
                         </div>
                       )}
                       {/* ── SOFT HITL: Switch to Deep Mode ── */}
