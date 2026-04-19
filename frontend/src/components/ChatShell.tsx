@@ -3,53 +3,114 @@ import Header from "./Header";
 import EmptyState from "./EmptyState";
 import QueryInput from "./QueryInput";
 import ModeSelector, { type Mode } from "./ModeSelector";
+import StatusBubble from "./StatusBubble";
+import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
+// ── Message types ──────────────────────────────────────────────
+
+interface UserMessage {
+  id:      string;
+  role:    "user";
   content: string;
 }
 
+interface AssistantMessage {
+  id:               string;
+  role:             "assistant";
+  answer:           string;
+  evidence:         EvidenceItem[];
+  confidence_score: number;
+  mode:             string;
+}
+
+type Message = UserMessage | AssistantMessage;
+
+// ── Component ─────────────────────────────────────────────────
+
 export default function ChatShell() {
-  const [query, setQuery]             = useState("");
-  const [messages, setMessages]       = useState<Message[]>([]);
-  const [isLoading, setIsLoading]     = useState(false);
-  const [selectedMode, setSelectedMode] = useState<Mode>("auto");   // ← user's chosen mode
-  const [displayMode, setDisplayMode]   = useState<string | undefined>(undefined); // ← what backend tells us it used
+  const [query,        setQuery]        = useState("");
+  const [messages,     setMessages]     = useState<Message[]>([]);
+  const [selectedMode, setSelectedMode] = useState<Mode>("auto");
+  const [chatHistory,  setChatHistory]  = useState<ChatHistoryItem[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  /* Auto-scroll to latest message */
+  /* The real SSE hook — replaces the old setTimeout stub */
+  const { isLoading, statusText, displayMode, finalAnswer, error, sendQuery } = useSSEChat();
+
+  /* ── When a final answer arrives, add it to the message list ── */
+  useEffect(() => {
+    if (!finalAnswer) return;
+
+    const assistantMsg: AssistantMessage = {
+      id:               crypto.randomUUID(),
+      role:             "assistant",
+      answer:           finalAnswer.answer,
+      evidence:         finalAnswer.evidence,
+      confidence_score: finalAnswer.confidence_score,
+      mode:             displayMode ?? "",
+    };
+
+    setMessages((prev) => [...prev, assistantMsg]);
+
+    /* Update chat history so the Contextualizer can resolve pronouns */
+    setChatHistory((prev) => [
+      ...prev,
+      { role: "assistant", content: finalAnswer.answer },
+    ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalAnswer]);
+
+  /* ── When an error arrives, show it as an assistant message ── */
+  useEffect(() => {
+    if (!error) return;
+    const errMsg: AssistantMessage = {
+      id:               crypto.randomUUID(),
+      role:             "assistant",
+      answer:           `⚠️ ${error}`,
+      evidence:         [],
+      confidence_score: 0,
+      mode:             "",
+    };
+    setMessages((prev) => [...prev, errMsg]);
+  }, [error]);
+
+  /* Auto-scroll to bottom on new messages or status */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, statusText]);
 
-  /* STUB — will be replaced with real SSE hook in Step 11.
-     `selectedMode` will be sent to the backend as the `mode` field. */
+  /* ── Submit handler ── */
   function handleSubmit() {
     if (!query.trim() || isLoading) return;
 
-    const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: query.trim() };
-    setMessages((prev) => [...prev, userMsg]);
-    setQuery("");
-    setIsLoading(true);
-
-    /* Simulate the backend responding with whichever mode was chosen */
-    const modeLabels: Record<Mode, string> = {
-      auto: "Auto → Selected: Fast ⚡",
-      fast: "Fast Mode ⚡",
-      deep: "Deep Mode 🧠",
+    const userMsg: UserMessage = {
+      id:      crypto.randomUUID(),
+      role:    "user",
+      content: query.trim(),
     };
-    setDisplayMode(modeLabels[selectedMode]);
 
-    setTimeout(() => {
-      const assistantMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: `[${selectedMode.toUpperCase()} MODE] Placeholder response. Real SSE backend integration in Sub-step 11. 🚀`,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-      setIsLoading(false);
-    }, 1500);
+    /* Add user message immediately for instant feedback */
+    setMessages((prev) => [...prev, userMsg]);
+
+    /* Track in chat history for the Contextualizer */
+    const updatedHistory: ChatHistoryItem[] = [
+      ...chatHistory,
+      { role: "user", content: query.trim() },
+    ];
+    setChatHistory(updatedHistory);
+
+    /* Fire the real backend call — contexts is empty for now;
+       the Chrome Extension content script will populate this in Step 3 */
+    sendQuery(query.trim(), selectedMode, [], updatedHistory);
+
+    setQuery("");
+  }
+
+  /* ── Confidence badge color ── */
+  function confidenceColor(score: number): string {
+    if (score >= 0.8) return "var(--status-success)";
+    if (score >= 0.5) return "var(--status-thinking)";
+    return "var(--status-error)";
   }
 
   return (
@@ -65,10 +126,10 @@ export default function ChatShell() {
         overflow: "hidden",
       }}>
 
-        {/* 1. Header */}
+        {/* 1. Header — shows mode reported by backend */}
         <Header activeMode={displayMode} />
 
-        {/* 2. Mode Selector — sits just below header */}
+        {/* 2. Mode selector */}
         <ModeSelector
           selected={selectedMode}
           onChange={setSelectedMode}
@@ -81,50 +142,81 @@ export default function ChatShell() {
             <EmptyState onPromptClick={setQuery} />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+
               {messages.map((msg) => (
                 <div key={msg.id} className="animate-fade-in-up"
                   style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
-                  <div style={{
-                    fontSize: "13px", lineHeight: 1.6,
-                    padding: "10px 16px", borderRadius: "18px",
-                    maxWidth: "85%",
-                    ...(msg.role === "user" ? {
+
+                  {msg.role === "user" ? (
+                    /* ── User bubble ── */
+                    <div style={{
+                      fontSize: "13px", lineHeight: 1.6,
+                      padding: "10px 16px", borderRadius: "18px",
+                      borderBottomRightRadius: "4px", maxWidth: "85%",
                       background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))",
                       color: "white",
-                      borderBottomRightRadius: "4px",
-                    } : {
-                      background: "var(--glass-bg)",
-                      border: "1px solid var(--glass-border)",
-                      color: "var(--text-primary)",
-                      borderBottomLeftRadius: "4px",
-                    }),
-                  }}>
-                    {msg.content}
-                  </div>
+                    }}>
+                      {msg.content}
+                    </div>
+                  ) : (
+                    /* ── Assistant bubble ── */
+                    <div style={{ maxWidth: "92%", display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <div style={{
+                        fontSize: "13px", lineHeight: 1.7,
+                        padding: "12px 16px", borderRadius: "18px",
+                        borderBottomLeftRadius: "4px",
+                        background: "var(--glass-bg)",
+                        border: "1px solid var(--glass-border)",
+                        color: "var(--text-primary)",
+                      }}>
+                        {msg.answer}
+                      </div>
+
+                      {/* Evidence chips + confidence badge */}
+                      {(msg.evidence.length > 0 || msg.confidence_score > 0) && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingLeft: "4px" }}>
+                          {/* Source chips */}
+                          {msg.evidence.map((ev, i) => (
+                            <span key={i} style={{
+                              fontSize: "11px", padding: "2px 8px",
+                              borderRadius: "99px",
+                              background: "rgba(99,102,241,0.15)",
+                              border: "1px solid rgba(99,102,241,0.3)",
+                              color: "var(--text-accent)",
+                            }}>
+                              📎 {ev.source_id}
+                            </span>
+                          ))}
+                          {/* Confidence badge */}
+                          {msg.confidence_score > 0 && (
+                            <span style={{
+                              fontSize: "11px", padding: "2px 8px",
+                              borderRadius: "99px",
+                              background: `${confidenceColor(msg.confidence_score)}20`,
+                              border: `1px solid ${confidenceColor(msg.confidence_score)}50`,
+                              color: confidenceColor(msg.confidence_score),
+                            }}>
+                              {Math.round(msg.confidence_score * 100)}% confident
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
 
-              {/* Thinking dots */}
-              {isLoading && (
-                <div className="animate-fade-in-up" style={{ display: "flex", justifyContent: "flex-start" }}>
-                  <div style={{
-                    padding: "12px 16px", borderRadius: "18px", borderBottomLeftRadius: "4px",
-                    background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
-                  }}>
-                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                      <span className="thinking-dot" />
-                      <span className="thinking-dot" />
-                      <span className="thinking-dot" />
-                    </div>
-                  </div>
-                </div>
+              {/* Live status while streaming */}
+              {isLoading && statusText && (
+                <StatusBubble text={statusText} />
               )}
+
               <div ref={bottomRef} />
             </div>
           )}
         </main>
 
-        {/* 4. Input bar */}
+        {/* 4. Input */}
         <QueryInput
           value={query}
           onChange={setQuery}
