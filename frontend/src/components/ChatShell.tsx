@@ -108,7 +108,7 @@ export default function ChatShell() {
     setLastQuery(query.trim());
 
     /* ── Chrome Extension Scraper Bridge ── */
-    let scrapedContexts: string[] = [];
+    let scrapedContexts: any[] = [];
 
     // Safely check if we are running inside the actual Chrome Extension
     // so we don't break our local Vite dev environment.
@@ -130,7 +130,11 @@ export default function ChatShell() {
           });
           
           if (response && response.contexts) {
-            scrapedContexts = response.contexts;
+            // Map the simple strings back into the expected Context objects
+            scrapedContexts = response.contexts.map((str: string, index: number) => ({
+              source_id: `Tab Context ${index}`,
+              content: str
+            }));
           }
         }
       } catch (err) {

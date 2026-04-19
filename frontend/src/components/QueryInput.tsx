@@ -1,4 +1,4 @@
-import { useRef, useEffect, KeyboardEvent } from "react";
+import { useRef, useEffect, type KeyboardEvent } from "react";
 
 interface QueryInputProps {
   value: string;
