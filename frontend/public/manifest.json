@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "ThinkTab AI",
+  "version": "1.0.0",
+  "description": "Your intelligent browsing assistant with Hybrid RAG & Soft HITL.",
+  "action": {
+    "default_title": "Open ThinkTab AI"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
