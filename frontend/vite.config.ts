@@ -13,7 +13,7 @@ export default defineConfig({
        In production (Chrome Extension), we call the backend directly. */
     proxy: {
       '/api': {
-        target:    'http://localhost:8000',
+        target:    'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite:   (path) => path,   // Keep /api/chat as-is
       },
