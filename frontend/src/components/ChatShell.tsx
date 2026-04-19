@@ -6,6 +6,7 @@ import ModeSelector, { type Mode } from "./ModeSelector";
 import StatusBubble from "./StatusBubble";
 import SoftHITLButton from "./SoftHITLButton";
 import EvidenceAccordion from "./EvidenceAccordion";
+import ErrorBubble from "./ErrorBubble";
 import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
 
 // ── Message types ──────────────────────────────────────────────
@@ -25,7 +26,13 @@ interface AssistantMessage {
   mode:             string;
 }
 
-type Message = UserMessage | AssistantMessage;
+interface ErrorMessage {
+  id:      string;
+  role:    "error";
+  message: string;
+}
+
+type Message = UserMessage | AssistantMessage | ErrorMessage;
 
 // ── Component ─────────────────────────────────────────────────
 
@@ -63,16 +70,13 @@ export default function ChatShell() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalAnswer]);
 
-  /* ── When an error arrives, show it as an assistant message ── */
+  /* ── When an error arrives, show it as an Error message ── */
   useEffect(() => {
     if (!error) return;
-    const errMsg: AssistantMessage = {
-      id:               crypto.randomUUID(),
-      role:             "assistant",
-      answer:           `⚠️ ${error}`,
-      evidence:         [],
-      confidence_score: 0,
-      mode:             "",
+    const errMsg: ErrorMessage = {
+      id:      crypto.randomUUID(),
+      role:    "error",
+      message: error,
     };
     setMessages((prev) => [...prev, errMsg]);
   }, [error]);
@@ -155,7 +159,17 @@ export default function ChatShell() {
                 <div key={msg.id} className="animate-fade-in-up"
                   style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
 
-                  {msg.role === "user" ? (
+                  {msg.role === "error" ? (
+                    /* ── System Error Bubble ── */
+                    <ErrorBubble 
+                      message={msg.message} 
+                      onRetry={() => {
+                        // Re-fire the last known query without adding a new user message to the UI
+                        abort(); 
+                        sendQuery(lastQuery, selectedMode, [], chatHistory);
+                      }} 
+                    />
+                  ) : msg.role === "user" ? (
                     /* ── User bubble ── */
                     <div style={{
                       fontSize: "13px", lineHeight: 1.6,
