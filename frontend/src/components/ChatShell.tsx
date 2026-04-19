@@ -87,7 +87,7 @@ export default function ChatShell() {
   }, [messages, isLoading, statusText]);
 
   /* ── Submit handler ── */
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!query.trim() || isLoading) return;
 
     const userMsg: UserMessage = {
@@ -107,9 +107,40 @@ export default function ChatShell() {
     setChatHistory(updatedHistory);
     setLastQuery(query.trim());
 
-    /* Fire the real backend call — contexts is empty for now;
-       the Chrome Extension content script will populate this in Step 3 */
-    sendQuery(query.trim(), selectedMode, [], updatedHistory);
+    /* ── Chrome Extension Scraper Bridge ── */
+    let scrapedContexts: string[] = [];
+
+    // Safely check if we are running inside the actual Chrome Extension
+    // so we don't break our local Vite dev environment.
+    if (typeof chrome !== "undefined" && chrome.tabs) {
+      try {
+        // Find the active tab in the current window
+        const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+        });
+
+        if (activeTab && activeTab.id) {
+          // Ask the content script injected into that tab to scrape text
+          const response = await new Promise<any>((resolve) => {
+            chrome.tabs.sendMessage(
+              activeTab.id!, 
+              { action: "SCRAPE_PAGE_CONTEXT" }, 
+              resolve
+            );
+          });
+          
+          if (response && response.contexts) {
+            scrapedContexts = response.contexts;
+          }
+        }
+      } catch (err) {
+        // Warning if the page blocks extension scripts (e.g. chrome:// urls)
+        console.warn("Could not scrape tab context:", err);
+      }
+    }
+
+    /* Fire the real backend call — now injecting the scraped contexts securely from the browser */
+    sendQuery(query.trim(), selectedMode, scrapedContexts, updatedHistory);
 
     setQuery("");
   }
