@@ -4,6 +4,7 @@ import EmptyState from "./EmptyState";
 import QueryInput from "./QueryInput";
 import ModeSelector, { type Mode } from "./ModeSelector";
 import StatusBubble from "./StatusBubble";
+import SoftHITLButton from "./SoftHITLButton";
 import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
 
 // ── Message types ──────────────────────────────────────────────
@@ -32,10 +33,11 @@ export default function ChatShell() {
   const [messages,     setMessages]     = useState<Message[]>([]);
   const [selectedMode, setSelectedMode] = useState<Mode>("auto");
   const [chatHistory,  setChatHistory]  = useState<ChatHistoryItem[]>([]);
+  const [lastQuery,    setLastQuery]    = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   /* The real SSE hook — replaces the old setTimeout stub */
-  const { isLoading, statusText, displayMode, finalAnswer, error, sendQuery } = useSSEChat();
+  const { isLoading, statusText, displayMode, finalAnswer, error, sendQuery, abort } = useSSEChat();
 
   /* ── When a final answer arrives, add it to the message list ── */
   useEffect(() => {
@@ -98,12 +100,20 @@ export default function ChatShell() {
       { role: "user", content: query.trim() },
     ];
     setChatHistory(updatedHistory);
+    setLastQuery(query.trim());
 
     /* Fire the real backend call — contexts is empty for now;
        the Chrome Extension content script will populate this in Step 3 */
     sendQuery(query.trim(), selectedMode, [], updatedHistory);
 
     setQuery("");
+  }
+
+  /* ── Soft HITL Logic: Cancel and Switch to Deep ── */
+  function handleSwitchToDeep() {
+    abort(); // Immediately kill the Fast stream if still running
+    setSelectedMode("deep");
+    sendQuery(lastQuery, "deep", [], chatHistory);
   }
 
   /* ── Confidence badge color ── */
@@ -138,7 +148,9 @@ export default function ChatShell() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
 
-              {messages.map((msg) => (
+              {messages.map((msg, index) => {
+                const isFinalMessage = index === messages.length - 1;
+                return (
                 <div key={msg.id} className="animate-fade-in-up"
                   style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
 
@@ -196,10 +208,19 @@ export default function ChatShell() {
                           )}
                         </div>
                       )}
+                      {/* ── SOFT HITL: Switch to Deep Mode ── */}
+                      {msg.role === "assistant" && isFinalMessage && msg.mode.includes("Fast") && (
+                        <div style={{ marginTop: "4px" }}>
+                          <SoftHITLButton 
+                            onClick={handleSwitchToDeep} 
+                            disabled={isLoading} 
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
 
               {/* Live status while streaming */}
               {isLoading && statusText && (
