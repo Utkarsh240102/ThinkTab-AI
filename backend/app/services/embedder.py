@@ -2,15 +2,24 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from app.core.config import settings
+import os
 
 # ─────────────────────────────────────────────────────────────
 # Embedding Model: Local HuggingFace sentence-transformers
 # Runs 100% locally — no API key, no rate limits, no quota.
 # all-MiniLM-L6-v2: 80MB, fast CPU inference, great quality
+# Model is cached inside the project at: ThinkTab-AI/models/
 # ─────────────────────────────────────────────────────────────
-print("[Embedder] Loading local embedding model (all-MiniLM-L6-v2)...")
+
+# Resolve the project root (ThinkTab-AI/) and create models/ folder if needed
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+_model_cache  = os.path.join(_project_root, "models")
+os.makedirs(_model_cache, exist_ok=True)
+
+print(f"[Embedder] Loading local embedding model → cache: {_model_cache}")
 embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
+    cache_folder=_model_cache,
     model_kwargs={"device": "cpu"},
     encode_kwargs={"normalize_embeddings": True},
 )
