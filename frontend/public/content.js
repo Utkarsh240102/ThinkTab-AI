@@ -27,9 +27,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // We push the Title in first so the AI knows exactly what site we are on
     const contextsArray = [`Page Title: ${pageTitle}`, ...paragraphs];
     
-    // We limit the array to the first 40 paragraphs to prevent 
-    // overloading the LLM context window on monstrously huge pages.
-    const limitedContexts = contextsArray.slice(0, 40);
+    // Limit to 8 entries (title + 7 paragraphs).
+    // The Gemini free tier allows 100 embedding requests/min — 
+    // sending too many paragraphs exhausts this quota instantly.
+    const limitedContexts = contextsArray.slice(0, 8);
     
     // Send it back to React
     sendResponse({ contexts: limitedContexts });
