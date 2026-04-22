@@ -27,13 +27,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // We push the Title in first so the AI knows exactly what site we are on
     const contextsArray = [`Page Title: ${pageTitle}`, ...paragraphs];
     
-    // Limit to 8 entries (title + 7 paragraphs).
-    // The Gemini free tier allows 100 embedding requests/min — 
-    // sending too many paragraphs exhausts this quota instantly.
+    // Limit to 8 entries before merging
     const limitedContexts = contextsArray.slice(0, 8);
-    
-    // Send it back to React
-    sendResponse({ contexts: limitedContexts });
+
+    // IMPORTANT: Merge all paragraphs into ONE string before sending.
+    // The backend creates a separate FAISS embedding job per context item.
+    // Sending 8 separate items = 8 API calls = quota exhausted instantly.
+    // Merging into 1 item = 1 API call = safely within free tier limits.
+    const mergedContext = limitedContexts.join("\n\n");
+
+    // Send it back to React as a single-item array
+    sendResponse({ contexts: [mergedContext] });
   }
 
   // Return true to indicate we will send a response asynchronously 

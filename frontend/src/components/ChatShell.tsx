@@ -130,9 +130,9 @@ export default function ChatShell() {
           });
           
           if (response && response.contexts) {
-            // Map the simple strings back into the expected Context objects
-            scrapedContexts = response.contexts.map((str: string, index: number) => ({
-              source_id: `Tab Context ${index}`,
+            // Map the merged string into the expected Context object shape
+            scrapedContexts = response.contexts.map((str: string) => ({
+              source_id: `Active Tab`,
               content: str
             }));
           }
