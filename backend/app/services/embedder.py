@@ -1,16 +1,20 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from app.core.config import settings
 
 # ─────────────────────────────────────────────────────────────
-# Embedding Model: Google Generative AI
-# Free to use, high quality, works natively with LangChain
+# Embedding Model: Local HuggingFace sentence-transformers
+# Runs 100% locally — no API key, no rate limits, no quota.
+# all-MiniLM-L6-v2: 80MB, fast CPU inference, great quality
 # ─────────────────────────────────────────────────────────────
-embeddings = GoogleGenerativeAIEmbeddings(
-    model=settings.EMBEDDING_MODEL,        # "models/gemini-embedding-001"
-    google_api_key=settings.GOOGLE_API_KEY,
+print("[Embedder] Loading local embedding model (all-MiniLM-L6-v2)...")
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    model_kwargs={"device": "cpu"},
+    encode_kwargs={"normalize_embeddings": True},
 )
+print("[Embedder] Local embedding model ready. ✅")
 
 # ─────────────────────────────────────────────────────────────
 # Text Splitter
