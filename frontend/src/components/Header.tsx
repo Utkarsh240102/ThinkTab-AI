@@ -2,6 +2,16 @@ interface HeaderProps {
   activeMode?: string;
 }
 
+function handleReload() {
+  // chrome.runtime.reload() is only available inside the real Chrome Extension.
+  // It gracefully falls back in the Vite dev environment.
+  if (typeof chrome !== "undefined" && chrome.runtime?.reload) {
+    chrome.runtime.reload();
+  } else {
+    window.location.reload();
+  }
+}
+
 export default function Header({ activeMode }: HeaderProps) {
   return (
     <header
@@ -49,8 +59,43 @@ export default function Header({ activeMode }: HeaderProps) {
         )}
       </div>
 
-      {/* Live dot */}
-      <div style={{ marginLeft: "auto" }}>
+      {/* Right side: Reload button + Live dot */}
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
+
+        {/* Reload Extension Button */}
+        <button
+          onClick={handleReload}
+          title="Reload extension"
+          style={{
+            background: "transparent",
+            border: "1px solid var(--glass-border)",
+            borderRadius: "6px",
+            padding: "4px 6px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--text-secondary)",
+            transition: "all 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)";
+            (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+            (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
+          }}
+        >
+          {/* Circular refresh SVG icon */}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+        </button>
+
+        {/* Live dot */}
         <div style={{
           width: "8px", height: "8px", borderRadius: "50%",
           background: "var(--status-success)",
