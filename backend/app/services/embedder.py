@@ -5,14 +5,11 @@ from app.core.config import settings
 import os
 
 # ─────────────────────────────────────────────────────────────
-# Embedding Model: BAAI/bge-m3 (Local)
+# Embedding Model: Local HuggingFace sentence-transformers
 # ─────────────────────────────────────────────────────────────
-# ✔ 100+ languages (English, Hindi, Arabic, Chinese...)
-# ✔ 8192 token context window (16x larger than standard models)
-# ✔ Dense + Sparse + Multi-vector retrieval (3 strategies in 1)
-# ✔ #1 on MTEB Multilingual leaderboard
-# ✔ ~2.2 GB, runs on CPU, no API key needed
-# ✔ Cached in: ThinkTab-AI/models/
+# all-MiniLM-L6-v2: 80MB, fast CPU inference, highly RAM-efficient.
+# Reverted from bge-m3 due to OS Error 1455 (RAM/Pagefile limits)
+# Model is cached inside the project at: ThinkTab-AI/models/
 # ─────────────────────────────────────────────────────────────
 
 # Resolve the project root (ThinkTab-AI/) and create models/ folder if needed
@@ -20,15 +17,14 @@ _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.
 _model_cache  = os.path.join(_project_root, "models")
 os.makedirs(_model_cache, exist_ok=True)
 
-print(f"[Embedder] Loading BAAI/bge-m3 → cache: {_model_cache}")
-print("[Embedder] First run will download ~2.2 GB. Subsequent runs load from cache instantly.")
+print(f"[Embedder] Loading all-MiniLM-L6-v2 → cache: {_model_cache}")
 embeddings = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-m3",
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
     cache_folder=_model_cache,
     model_kwargs={"device": "cpu"},
     encode_kwargs={"normalize_embeddings": True},
 )
-print("[Embedder] BAAI/bge-m3 ready. ✅ Supports 100+ languages, 8192 token context.")
+print("[Embedder] all-MiniLM-L6-v2 ready. ✅")
 
 # ─────────────────────────────────────────────────────────────
 # Text Splitter
