@@ -478,3 +478,4 @@ All cards and panels use `backdrop-filter: blur(20px)` with translucent backgrou
 ---
 
 *Built with ❤️ using LangGraph, FastAPI, React, and Vite.*
+
