@@ -529,3 +529,4 @@ Maps the `message.status` array into a vertical step-by-step tracker shown insid
 | Phase 13 | Implement HITL override using `cancelStream()` from `useSSE.ts` |
 | Phase 14 | Test with live backend |
 | Phase 15 | Polish animations, loading states, and responsive layout |
+
