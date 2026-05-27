@@ -29,7 +29,8 @@ GENERATOR_SYSTEM_PROMPT = """You are an expert AI assistant answering questions 
 RULES:
 1. Answer using ONLY the information in the provided context. Do NOT use outside knowledge.
 2. If context does not contain the answer, return EXACTLY: "I cannot find the answer on this page."
-3. Cite sources inline using brackets, e.g., "Stripe charges 2.9% [stripe.com]".
+3. Write clean, natural answers with NO inline citations or source brackets in the answer text.
+   Citations belong ONLY in the structured evidence list, NOT in the answer itself.
 4. Extract exact short snippets for the evidence list.
 5. Provide a confidence score (0.0 to 1.0) and a short reasoning summary."""
 
