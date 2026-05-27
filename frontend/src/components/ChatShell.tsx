@@ -8,6 +8,7 @@ import SoftHITLButton from "./SoftHITLButton";
 import EvidenceAccordion from "./EvidenceAccordion";
 import ErrorBubble from "./ErrorBubble";
 import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
+import ReactMarkdown from "react-markdown";
 
 // ── Message types ──────────────────────────────────────────────
 
@@ -230,7 +231,7 @@ export default function ChatShell() {
                   ) : (
                     /* ── Assistant bubble ── */
                     <div style={{ maxWidth: "92%", display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <div style={{
+                      <div className="markdown-body" style={{
                         fontSize: "13px", lineHeight: 1.7,
                         padding: "12px 16px", borderRadius: "18px",
                         borderBottomLeftRadius: "4px",
@@ -238,7 +239,7 @@ export default function ChatShell() {
                         border: "1px solid var(--glass-border)",
                         color: "var(--text-primary)",
                       }}>
-                        {msg.answer}
+                        <ReactMarkdown>{msg.answer}</ReactMarkdown>
                       </div>
 
                       {/* Evidence Accordion + Confidence badge */}
