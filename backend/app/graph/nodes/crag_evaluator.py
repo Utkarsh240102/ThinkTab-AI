@@ -68,10 +68,27 @@ def eval_docs(state: GraphState) -> GraphState:
         result: CRAGScoreBatch = structured_llm.invoke(messages)
         scores = result.scores
 
-        # Guard: if the LLM returns fewer scores than docs (rare), pad with 0.0
-        if len(scores) < len(docs):
-            print(f"[CRAG Evaluator] WARNING: Got {len(scores)} scores for {len(docs)} docs. Padding with 0.0")
-            scores += [0.0] * (len(docs) - len(scores))
+        # Guard: if the LLM returns fewer scores than docs, retry once with a stricter prompt
+        if len(scores) != len(docs):
+            print(f"[CRAG Evaluator] WARNING: Got {len(scores)} scores for {len(docs)} docs. Retrying with explicit count...")
+            retry_messages = [
+                SystemMessage(content=CRAG_SYSTEM_PROMPT),
+                HumanMessage(content=(
+                    f"Question: {query}\n\n"
+                    f"Document Chunks:{chunks_text}\n\n"
+                    f"IMPORTANT: There are exactly {len(docs)} chunks above. "
+                    f"You MUST return exactly {len(docs)} scores — one per chunk, in order."
+                ))
+            ]
+            retry_result: CRAGScoreBatch = structured_llm.invoke(retry_messages)
+            scores = retry_result.scores
+
+            # If still wrong after retry, pad/trim as last resort
+            if len(scores) < len(docs):
+                print(f"[CRAG Evaluator] Retry still returned {len(scores)} scores. Padding remaining with 0.0")
+                scores += [0.0] * (len(docs) - len(scores))
+            elif len(scores) > len(docs):
+                scores = scores[:len(docs)]
 
     except Exception as e:
         print(f"[CRAG Evaluator] Batch scoring failed: {e}. Assuming 0.5 for all chunks.")
