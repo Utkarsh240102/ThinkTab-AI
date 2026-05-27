@@ -9,6 +9,8 @@ from app.graph.state import GraphState
 from app.graph.fast_mode import run_fast_mode
 from app.graph.auto_router import route_query
 from app.graph.deep_mode import deep_mode_graph
+from app.services.llm_service import fast_llm
+from langchain_core.messages import SystemMessage, HumanMessage
 
 router = APIRouter()
 
@@ -122,12 +124,59 @@ async def chat(request: ChatRequest):
             # ── Step 2: Auto Router (Mode Selection) ────────────────
             if request.mode == "auto":
                 selected_mode = route_query(state)
-                yield sse_event({"type": "mode", "value": f"Auto → Selected: {selected_mode.title()} " + ("⚡" if selected_mode == "fast" else "🧠")})
+                if selected_mode == "chat":
+                    mode_label = "💬 Chat"
+                elif selected_mode == "fast":
+                    mode_label = "Auto → Selected: Fast ⚡"
+                else:
+                    mode_label = "Auto → Selected: Deep 🧠"
+                yield sse_event({"type": "mode", "value": mode_label})
             else:
                 selected_mode = request.mode
                 yield sse_event({"type": "mode", "value": f"{selected_mode.title()} Mode " + ("⚡" if selected_mode == "fast" else "🧠")})
-                
+
             state["selected_mode"] = selected_mode
+
+            # ── Step 2.5: Conversational Bypass (Chat Mode) ──────────────
+            # If the router detected small talk / greetings, skip ALL retrieval
+            # pipelines and directly call the LLM for an instant reply.
+            if selected_mode == "chat":
+                print("[Chat Bypass] Conversational query detected. Skipping RAG pipeline.")
+
+                # Build messages from chat history + current query
+                chat_messages = [
+                    SystemMessage(content=(
+                        "You are ThinkTab AI, a friendly and intelligent browser assistant. "
+                        "The user is making casual conversation. Respond warmly and naturally. "
+                        "Keep your reply concise (1-3 sentences max). "
+                        "Do not mention documents, sources, or retrieval."
+                    ))
+                ]
+
+                # Add previous conversation turns for context
+                for turn in (request.chat_history or []):
+                    if turn.role == "user":
+                        chat_messages.append(HumanMessage(content=turn.content))
+                    else:
+                        from langchain_core.messages import AIMessage
+                        chat_messages.append(AIMessage(content=turn.content))
+
+                # Add the current user message
+                chat_messages.append(HumanMessage(content=request.query))
+
+                # Call the fast LLM directly — no RAG, no search
+                reply = fast_llm.invoke(chat_messages)
+                reply_text = reply.content if hasattr(reply, "content") else str(reply)
+
+                print(f"[Chat Bypass] Reply: {reply_text[:80]}...")
+                yield sse_event({
+                    "type": "final",
+                    "answer": reply_text,
+                    "evidence": [],
+                    "confidence_score": 1.0,
+                    "reasoning_summary": "Conversational response — no retrieval needed."
+                })
+                return  # ← Exit the event stream immediately, skip all pipeline code
 
             # ── Helper for Deep Mode Execution ────────────────
             async def execute_deep_mode(current_state: GraphState):
