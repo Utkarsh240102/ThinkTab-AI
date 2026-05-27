@@ -1,5 +1,6 @@
 interface HeaderProps {
   activeMode?: string;
+  onClearChat?: () => void;
 }
 
 function handleReload() {
@@ -12,7 +13,7 @@ function handleReload() {
   }
 }
 
-export default function Header({ activeMode }: HeaderProps) {
+export default function Header({ activeMode, onClearChat }: HeaderProps) {
   return (
     <header
       style={{
@@ -59,8 +60,46 @@ export default function Header({ activeMode }: HeaderProps) {
         )}
       </div>
 
-      {/* Right side: Reload button + Live dot */}
+      {/* Right side: Clear Chat + Reload button + Live dot */}
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
+
+        {/* Clear Chat Button */}
+        {onClearChat && (
+          <button
+            onClick={onClearChat}
+            title="Clear Chat"
+            style={{
+              background: "transparent",
+              border: "1px solid var(--glass-border)",
+              borderRadius: "6px",
+              padding: "4px 6px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--text-secondary)",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.1)"; // faint red hover
+              (e.currentTarget as HTMLButtonElement).style.color = "#ef4444"; // red icon
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239, 68, 68, 0.3)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--glass-border)";
+            }}
+          >
+            {/* Trash SVG icon */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </svg>
+          </button>
+        )}
 
         {/* Reload Extension Button */}
         <button

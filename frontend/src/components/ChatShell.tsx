@@ -160,6 +160,14 @@ export default function ChatShell() {
     sendQuery(lastQuery, "deep", [], chatHistory);
   }
 
+  /* ── Clear Chat Logic ── */
+  function handleClearChat() {
+    if (isLoading) abort();
+    setMessages([]);
+    setChatHistory([]);
+    setLastQuery("");
+  }
+
   /* ── Confidence badge color ── */
   function confidenceColor(score: number): string {
     if (score >= 0.8) return "var(--status-success)";
@@ -181,7 +189,7 @@ export default function ChatShell() {
       }}>
 
         {/* 1. Header — shows mode reported by backend */}
-        <Header activeMode={displayMode} />
+        <Header activeMode={displayMode} onClearChat={handleClearChat} />
 
         {/* 2. Mode selector removed from here — now lives in the bottom toolbar */}
 
