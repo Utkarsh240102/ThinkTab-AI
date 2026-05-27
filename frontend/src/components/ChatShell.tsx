@@ -87,6 +87,57 @@ export default function ChatShell() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, statusText]);
 
+  const BACKEND_URL = "http://127.0.0.1:8000";
+
+  /* ── Reusable Tab Scraper ── */
+  async function scrapeActiveTab(): Promise<any[]> {
+    let scrapedContexts: any[] = [];
+    if (typeof chrome !== "undefined" && chrome.tabs) {
+      try {
+        const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
+          chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve);
+        });
+
+        if (activeTab && activeTab.id) {
+          const response = await new Promise<any>((resolve) => {
+            chrome.tabs.sendMessage(activeTab.id!, { action: "SCRAPE_PAGE_CONTEXT" }, resolve);
+          });
+          
+          if (response && response.contexts) {
+            scrapedContexts = response.contexts.map((str: string) => ({
+              source_id: `Active Tab`,
+              content: str
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("Could not scrape tab context:", err);
+      }
+    }
+    return scrapedContexts;
+  }
+
+  /* ── Pre-embed on Extension Open ── */
+  useEffect(() => {
+    async function preEmbedPage() {
+      const contexts = await scrapeActiveTab();
+      if (contexts.length > 0) {
+        try {
+          // Send the first (and only) context item to the embed endpoint
+          await fetch(`${BACKEND_URL}/api/embed`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(contexts[0])
+          });
+          console.log("✅ Page pre-embedded successfully.");
+        } catch (err) {
+          console.warn("Failed to pre-embed page:", err);
+        }
+      }
+    }
+    preEmbedPage();
+  }, []);
+
   /* ── Submit handler ── */
   async function handleSubmit() {
     if (!query.trim() || isLoading) return;
@@ -108,45 +159,8 @@ export default function ChatShell() {
     setChatHistory(updatedHistory);
     setLastQuery(query.trim());
 
-    /* ── Chrome Extension Scraper Bridge ── */
-    let scrapedContexts: any[] = [];
-
-    // Safely check if we are running inside the actual Chrome Extension
-    // so we don't break our local Vite dev environment.
-    if (typeof chrome !== "undefined" && chrome.tabs) {
-      try {
-        // Find the active tab in the last focused browser window.
-        // We use lastFocusedWindow instead of currentWindow because
-        // the Chrome Side Panel can be treated as its own window,
-        // which would cause chrome.tabs.query to return the panel itself
-        // instead of the actual webpage tab the user is reading.
-        const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
-          chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve);
-        });
-
-        if (activeTab && activeTab.id) {
-          // Ask the content script injected into that tab to scrape text
-          const response = await new Promise<any>((resolve) => {
-            chrome.tabs.sendMessage(
-              activeTab.id!, 
-              { action: "SCRAPE_PAGE_CONTEXT" }, 
-              resolve
-            );
-          });
-          
-          if (response && response.contexts) {
-            // Map the merged string into the expected Context object shape
-            scrapedContexts = response.contexts.map((str: string) => ({
-              source_id: `Active Tab`,
-              content: str
-            }));
-          }
-        }
-      } catch (err) {
-        // Warning if the page blocks extension scripts (e.g. chrome:// urls)
-        console.warn("Could not scrape tab context:", err);
-      }
-    }
+    /* ── Scrape page securely from the browser ── */
+    const scrapedContexts = await scrapeActiveTab();
 
     /* Fire the real backend call — now injecting the scraped contexts securely from the browser */
     sendQuery(query.trim(), selectedMode, scrapedContexts, updatedHistory);
