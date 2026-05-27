@@ -114,9 +114,13 @@ export default function ChatShell() {
     // so we don't break our local Vite dev environment.
     if (typeof chrome !== "undefined" && chrome.tabs) {
       try {
-        // Find the active tab in the current window
+        // Find the active tab in the last focused browser window.
+        // We use lastFocusedWindow instead of currentWindow because
+        // the Chrome Side Panel can be treated as its own window,
+        // which would cause chrome.tabs.query to return the panel itself
+        // instead of the actual webpage tab the user is reading.
         const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
-          chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+          chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve);
         });
 
         if (activeTab && activeTab.id) {
