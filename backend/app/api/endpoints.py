@@ -221,7 +221,10 @@ async def chat(request: ChatRequest):
                     await asyncio.sleep(0.1)
                     
                 if safety_net_triggered:
-                    # ── Safety Net: Run Deep Mode ────────────────
+                    # ── Safety Net: Upgrade to Deep Mode ────────────────
+                    # Update the mode badge in the frontend header so the user
+                    # sees the ACTUAL mode that produced the answer, not "Fast"
+                    yield sse_event({"type": "mode", "value": "Auto → Upgraded to Deep 🧠"})
                     yield sse_event({"type": "status", "value": "Information not found locally. Upgrading to Deep Search... 🧠"})
                     state["selected_mode"] = "deep"
                     
