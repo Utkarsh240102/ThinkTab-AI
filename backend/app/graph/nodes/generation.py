@@ -16,7 +16,7 @@ class EvidenceItem(BaseModel):
 
 class FinalOutput(BaseModel):
     reasoning_summary: str = Field(description="A short plain-English explanation of how the answer was derived")
-    answer: str = Field(description="The markdown-formatted final answer. MUST cite sources using [Source Name] format inline. If the answer is not found, this MUST be exactly 'I cannot find the answer on this page.'")
+    answer: str = Field(description="The markdown-formatted final answer. Do NOT include source citations in this text. If the answer is not found, this MUST be exactly 'I cannot find the answer on this page.'")
     evidence: List[EvidenceItem] = Field(description="List of evidence items used to formulate the answer")
     confidence_score: float = Field(description="A score between 0.0 and 1.0 indicating confidence in the answer")
 
@@ -29,10 +29,10 @@ GENERATOR_SYSTEM_PROMPT = """You are an expert AI assistant answering questions 
 RULES:
 1. Answer using ONLY the information in the provided context. Do NOT use outside knowledge.
 2. If context does not contain the answer, return EXACTLY: "I cannot find the answer on this page."
-3. Write clean, natural answers with NO inline citations or source brackets in the answer text.
-   Citations belong ONLY in the structured evidence list, NOT in the answer itself.
-4. Extract exact short snippets for the evidence list.
-5. Provide a confidence score (0.0 to 1.0) and a short reasoning summary."""
+3. Write clean, complete, natural sentences. (e.g. "The capital of France is Paris." NOT just "Paris").
+4. NO inline citations or source brackets in the answer text. Citations belong ONLY in the structured evidence list.
+5. Extract exact short snippets for the evidence list.
+6. Provide a confidence score (0.0 to 1.0) and a short reasoning summary."""
 
 # Alias for backwards compatibility with fast_mode.py
 FAST_GENERATOR_SYSTEM_PROMPT = GENERATOR_SYSTEM_PROMPT
