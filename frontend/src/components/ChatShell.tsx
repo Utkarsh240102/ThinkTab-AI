@@ -403,7 +403,7 @@ export default function ChatShell() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isPDFLoading || isLoading}
-              title={pdfContext ? `PDF attached: ${pdfContext.source_id}` : "Attach a PDF"}
+              title={isPDFLoading ? (pdfStatusText || "Parsing...") : pdfContext ? `PDF attached: ${pdfContext.source_id}` : "Attach a PDF"}
               style={{
                 background:   pdfContext ? "rgba(99,102,241,0.15)" : "transparent",
                 border:       pdfContext ? "1px solid rgba(99,102,241,0.4)" : "1px solid var(--glass-border)",
@@ -429,7 +429,7 @@ export default function ChatShell() {
                   (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
                 }
               }}
-              title={isPDFLoading ? (pdfStatusText || "Parsing...") : "Attach a PDF"}
+
             >
               {isPDFLoading ? (
                 // Spinning loader while PDF is being parsed
