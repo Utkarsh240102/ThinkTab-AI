@@ -55,7 +55,7 @@ export default function ChatShell() {
   const { isLoading, statusText, displayMode, finalAnswer, error, sendQuery, abort } = useSSEChat();
 
   /* PDF parsing hook */
-  const { parseFile, isLoading: isPDFLoading, error: pdfError, clearError: clearPDFError } = usePDFParser();
+  const { parseFile, isLoading: isPDFLoading, statusText: pdfStatusText, error: pdfError, clearError: clearPDFError } = usePDFParser();
 
   /* ── When a final answer arrives, add it to the message list ── */
   useEffect(() => {
@@ -429,6 +429,7 @@ export default function ChatShell() {
                   (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
                 }
               }}
+              title={isPDFLoading ? (pdfStatusText || "Parsing...") : "Attach a PDF"}
             >
               {isPDFLoading ? (
                 // Spinning loader while PDF is being parsed
