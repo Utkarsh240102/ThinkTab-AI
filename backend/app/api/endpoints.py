@@ -1,6 +1,7 @@
 import json
 import asyncio
-from fastapi import APIRouter
+import fitz                                          # PyMuPDF — server-side PDF parser
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Literal, Optional
@@ -54,6 +55,17 @@ class ChatRequest(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────
+# PDF Upload Response Model
+# ─────────────────────────────────────────────────────────────
+
+class PDFUploadResponse(BaseModel):
+    """Returned after server-side PDF parsing."""
+    source_id:  str   # Original filename e.g. "research.pdf"
+    content:    str   # Full extracted text from all pages
+    page_count: int   # Number of pages in the PDF
+
+
+# ─────────────────────────────────────────────────────────────
 # SSE Helper — Formats a Python dict into an SSE data line
 # ─────────────────────────────────────────────────────────────
 
@@ -66,6 +78,90 @@ def sse_event(data: dict) -> str:
         data: {"type": "status", "value": "Searching the web..."}\\n\\n
     """
     return f"data: {json.dumps(data)}\n\n"
+
+
+# ─────────────────────────────────────────────────────────────
+# PDF Upload Route — Server-side fallback for scanned PDFs
+# ─────────────────────────────────────────────────────────────
+
+# Hard file size limit: 20 MB. Named constant — not a magic number.
+MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
+
+@router.post("/upload-pdf", response_model=PDFUploadResponse)
+async def upload_pdf(file: UploadFile = File(...)):
+    """
+    POST /api/upload-pdf
+
+    Accepts a raw PDF file upload (multipart/form-data).
+    Uses PyMuPDF (fitz) to extract text server-side.
+    Returns extracted text, filename, and page count as JSON.
+
+    This endpoint is called by the frontend ONLY as a fallback
+    when pdfjs-dist (client-side) returned less than 100 characters,
+    indicating the PDF is likely a scanned/image-only document.
+    """
+
+    # ── Guard 1: Validate file type ──────────────────────────────────────────
+    # Check the content type sent by the browser.
+    # Only accept PDFs — reject Word docs, images, etc.
+    if file.content_type not in ("application/pdf", "application/octet-stream"):
+        raise HTTPException(
+            status_code=415,  # 415 = Unsupported Media Type
+            detail="Only PDF files are accepted. Please upload a .pdf file."
+        )
+
+    # ── Guard 2: Read file bytes ─────────────────────────────────────────────
+    # We read the entire file into memory as raw bytes.
+    # This is safe because of the size guard below.
+    file_bytes = await file.read()
+
+    # ── Guard 3: File size limit ─────────────────────────────────────────────
+    # Reject files larger than 20 MB to protect server memory.
+    # We check AFTER reading so we have the actual byte count.
+    if len(file_bytes) > MAX_PDF_SIZE_BYTES:
+        size_mb = len(file_bytes) / 1024 / 1024
+        raise HTTPException(
+            status_code=413,  # 413 = Content Too Large
+            detail=f"File too large ({size_mb:.1f} MB). Maximum allowed size is 20 MB."
+        )
+
+    # ── Extract text using PyMuPDF ───────────────────────────────────────────
+    try:
+        # Open the PDF from raw bytes — never writes to disk.
+        # stream= tells fitz to read from memory instead of a file path.
+        pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+
+        page_texts = []
+        for page in pdf_doc:
+            # get_text() extracts all readable text from the page.
+            # "text" mode returns a plain string (vs "dict" or "html" modes).
+            page_text = page.get_text("text").strip()
+            if page_text:
+                page_texts.append(page_text)
+
+        page_count = len(pdf_doc)
+
+        # Always close the document to free C-level memory immediately
+        pdf_doc.close()
+
+        # Join all pages with double newline (paragraph break between pages)
+        full_text = "\n\n".join(page_texts)
+
+        print(f"[PDF Upload] Parsed '{file.filename}' — {page_count} pages, {len(full_text)} chars extracted.")
+
+        return PDFUploadResponse(
+            source_id=file.filename or "uploaded_document.pdf",
+            content=full_text,
+            page_count=page_count,
+        )
+
+    except Exception as e:
+        # Catch any PyMuPDF parsing error and return a clean HTTP error
+        print(f"[PDF Upload] ERROR parsing '{file.filename}': {e}")
+        raise HTTPException(
+            status_code=422,  # 422 = Unprocessable Entity
+            detail=f"Could not parse the PDF file. It may be corrupted or encrypted."
+        )
 
 
 # ─────────────────────────────────────────────────────────────
