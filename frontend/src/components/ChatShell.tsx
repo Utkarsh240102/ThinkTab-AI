@@ -168,11 +168,19 @@ export default function ChatShell() {
     setChatHistory(updatedHistory);
     setLastQuery(query.trim());
 
-    /* ── Scrape page securely from the browser ── */
+    /* ── Scrape the active webpage context ── */
     const scrapedContexts = await scrapeActiveTab();
 
-    /* Fire the real backend call — now injecting the scraped contexts securely from the browser */
-    sendQuery(query.trim(), selectedMode, scrapedContexts, updatedHistory);
+    /* ── Merge webpage + PDF contexts ── */
+    // We MERGE both — not replace — so the RAG pipeline can search
+    // across the webpage AND the PDF at the same time.
+    const allContexts = [...scrapedContexts];
+    if (pdfContext) {
+      allContexts.push(pdfContext);
+    }
+
+    /* Fire the backend call with all available contexts */
+    sendQuery(query.trim(), selectedMode, allContexts, updatedHistory);
 
     setQuery("");
   }
@@ -451,12 +459,27 @@ export default function ChatShell() {
 
                 const result = await parseFile(file);
                 if (result) {
-                  setPdfContext({ source_id: result.fileName, content: result.text });
+                  const newContext = { source_id: result.fileName, content: result.text };
+                  setPdfContext(newContext);
 
-                  // Warn the user if the PDF appears to be a scanned image
+                  // ── Silent Pre-Embed ──────────────────────────────────────────
+                  // Send the PDF text to the backend immediately after parsing,
+                  // so FAISS embeds it in the background while the user types.
+                  // By the time they press Send, the first query will be instant.
+                  try {
+                    await fetch(`${BACKEND_URL}/api/embed`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(newContext),
+                    });
+                    console.log(`✅ PDF "${result.fileName}" pre-embedded (${result.pageCount} pages).`);
+                  } catch {
+                    // Pre-embed failure is non-critical — the query will still work,
+                    // it'll just embed on demand at query time instead.
+                    console.warn("[PDF] Pre-embed failed — will embed on first query.");
+                  }
+
                   if (result.isScanned) {
-                    // We reuse the pdfError channel — clearPDFError will dismiss it
-                    // We call it via console since we can't set state from outside the hook
                     console.warn("[PDF] Scanned PDF detected — text extraction may be incomplete.");
                   }
                 }
