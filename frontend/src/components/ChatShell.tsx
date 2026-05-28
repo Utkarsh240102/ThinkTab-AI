@@ -9,6 +9,7 @@ import EvidenceAccordion from "./EvidenceAccordion";
 import ErrorBubble from "./ErrorBubble";
 import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
 import ReactMarkdown from "react-markdown";
+import { usePDFParser } from "../hooks/usePDFParser";
 
 // ── Message types ──────────────────────────────────────────────
 
@@ -43,10 +44,18 @@ export default function ChatShell() {
   const [selectedMode, setSelectedMode] = useState<Mode>("auto");
   const [chatHistory,  setChatHistory]  = useState<ChatHistoryItem[]>([]);
   const [lastQuery,    setLastQuery]    = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const bottomRef  = useRef<HTMLDivElement>(null);
+  // Hidden file input ref — we programmatically click it when the 📎 button is pressed
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /* PDF context: null = no PDF loaded, object = a PDF is attached */
+  const [pdfContext, setPdfContext] = useState<{ source_id: string; content: string } | null>(null);
 
   /* The real SSE hook — replaces the old setTimeout stub */
   const { isLoading, statusText, displayMode, finalAnswer, error, sendQuery, abort } = useSSEChat();
+
+  /* PDF parsing hook */
+  const { parseFile, isLoading: isPDFLoading, error: pdfError, clearError: clearPDFError } = usePDFParser();
 
   /* ── When a final answer arrives, add it to the message list ── */
   useEffect(() => {
@@ -308,17 +317,150 @@ export default function ChatShell() {
 
         {/* 4. Bottom section — mode trigger + input (position:relative anchors the popup) */}
         <div style={{ position: "relative" }}>
-          {/* Toolbar row: mode selector trigger */}
+
+          {/* ── PDF Error Toast ── */}
+          {pdfError && (
+            <div style={{
+              margin: "0 16px 8px",
+              padding: "8px 12px",
+              borderRadius: "8px",
+              background: "rgba(239,68,68,0.12)",
+              border: "1px solid rgba(239,68,68,0.3)",
+              color: "#ef4444",
+              fontSize: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "8px",
+            }}>
+              <span>⚠️ {pdfError}</span>
+              <button
+                onClick={clearPDFError}
+                style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "14px", padding: 0 }}
+              >×</button>
+            </div>
+          )}
+
+          {/* ── Active PDF Badge ── */}
+          {pdfContext && (
+            <div style={{
+              margin: "0 16px 6px",
+              padding: "5px 10px",
+              borderRadius: "20px",
+              background: "rgba(99,102,241,0.12)",
+              border: "1px solid rgba(99,102,241,0.3)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "11px",
+              color: "var(--text-accent)",
+              maxWidth: "calc(100% - 32px)",
+            }}>
+              <span>📄</span>
+              {/* Truncate very long filenames so they don't overflow */}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "200px" }}>
+                {pdfContext.source_id}
+              </span>
+              <button
+                onClick={() => setPdfContext(null)}
+                title="Remove PDF"
+                style={{
+                  background: "none", border: "none",
+                  color: "var(--text-secondary)", cursor: "pointer",
+                  fontSize: "14px", padding: 0, lineHeight: 1,
+                  flexShrink: 0,
+                }}
+              >×</button>
+            </div>
+          )}
+
+          {/* Toolbar row: mode selector + PDF attach button */}
           <div style={{
-            display:        "flex",
-            alignItems:     "center",
-            padding:        "8px 16px 0",
-            borderTop:      "1px solid var(--glass-border)",
+            display:    "flex",
+            alignItems: "center",
+            padding:    "8px 16px 0",
+            borderTop:  "1px solid var(--glass-border)",
+            gap:        "8px",
           }}>
             <ModeSelector
               selected={selectedMode}
               onChange={setSelectedMode}
               disabled={isLoading}
+            />
+
+            {/* Spacer pushes attach button to the right */}
+            <div style={{ flex: 1 }} />
+
+            {/* ── PDF Attach Button ── */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isPDFLoading || isLoading}
+              title={pdfContext ? `PDF attached: ${pdfContext.source_id}` : "Attach a PDF"}
+              style={{
+                background:   pdfContext ? "rgba(99,102,241,0.15)" : "transparent",
+                border:       pdfContext ? "1px solid rgba(99,102,241,0.4)" : "1px solid var(--glass-border)",
+                borderRadius: "6px",
+                padding:      "4px 6px",
+                cursor:       isPDFLoading ? "wait" : "pointer",
+                display:      "flex",
+                alignItems:   "center",
+                justifyContent: "center",
+                color:        pdfContext ? "var(--accent-primary)" : "var(--text-secondary)",
+                transition:   "all 0.2s ease",
+                opacity:      isPDFLoading ? 0.6 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!pdfContext) {
+                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)";
+                  (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!pdfContext) {
+                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                  (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
+                }
+              }}
+            >
+              {isPDFLoading ? (
+                // Spinning loader while PDF is being parsed
+                <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              ) : (
+                // Paperclip icon
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              )}
+            </button>
+
+            {/* Hidden file input — only accepts PDF files */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              style={{ display: "none" }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                // Reset input value so selecting the same file again triggers onChange
+                e.target.value = "";
+                if (!file) return;
+
+                const result = await parseFile(file);
+                if (result) {
+                  setPdfContext({ source_id: result.fileName, content: result.text });
+
+                  // Warn the user if the PDF appears to be a scanned image
+                  if (result.isScanned) {
+                    // We reuse the pdfError channel — clearPDFError will dismiss it
+                    // We call it via console since we can't set state from outside the hook
+                    console.warn("[PDF] Scanned PDF detected — text extraction may be incomplete.");
+                  }
+                }
+              }}
             />
           </div>
 
