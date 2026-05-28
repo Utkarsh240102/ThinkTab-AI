@@ -57,6 +57,7 @@ frontend/build/
 dist-zip/
 *.crx
 *.pem
+*.zip
 
 # ===========================
 # OS & Editor
