@@ -33,3 +33,4 @@ httpx
 
 # Document Processing
 pypdf
+pymupdf
