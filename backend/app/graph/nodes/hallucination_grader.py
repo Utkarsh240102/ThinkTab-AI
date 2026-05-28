@@ -25,13 +25,13 @@ hallucination_checker = fast_llm.with_structured_output(HallucinationVerdict)
 # ─────────────────────────────────────────────────────────────
 # System Prompt
 # ─────────────────────────────────────────────────────────────
-HALLUCINATION_SYSTEM_PROMPT = """You are a strict fact-checker. Your job is to verify if an AI-generated answer is fully supported by the provided context.
+HALLUCINATION_SYSTEM_PROMPT = """You are an intelligent fact-checker. Your job is to verify if an AI-generated answer is grounded in the provided context, while still allowing the AI to analyze and evaluate the text.
 
 Rules:
-- Answer 'yes' ONLY if every single claim in the answer can be directly traced back to the context.
-- Answer 'no' if the answer contains ANY fact, number, date, or claim not present in the context.
-- Do NOT use your own knowledge. Only use what is in the context.
-- Be strict. Even one unsupported claim means 'no'."""
+- Answer 'yes' if the answer relies on the context for its underlying facts.
+- Answer 'yes' if the answer provides an evaluation, opinion, rating, or summary (e.g., "This resume is an 8/10", "This code is bad") AS LONG AS that analysis is logically derived from the facts in the context.
+- Answer 'no' ONLY if the answer invents external facts, names, dates, or events that are not present in the context.
+- Do NOT use your own knowledge for hard facts, but you MAY use your own reasoning to analyze the provided facts."""
 
 
 def check_hallucination(state: GraphState) -> GraphState:

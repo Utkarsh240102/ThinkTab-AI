@@ -369,6 +369,11 @@ async def embed_source(context: ContextItem):
     Allows the Chrome Extension to pre-embed a page in the background
     as soon as the user lands on it, so the first query is instant.
     """
+    # Guard: Reject empty content — FAISS crashes on zero-length text
+    if not context.content or not context.content.strip():
+        print(f"[Embed] Skipping empty content for source '{context.source_id}'")
+        return {"status": "skipped", "source_id": context.source_id, "reason": "empty content"}
+
     from app.services.vector_store import embedding_cache
     embedding_cache.get_or_embed(context.content, context.source_id)
     return {"status": "cached", "source_id": context.source_id}
