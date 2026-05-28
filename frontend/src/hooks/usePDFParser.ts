@@ -11,9 +11,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 // ── Minimum text threshold ────────────────────────────────────────────────────
-// If extracted text is shorter than this, the PDF is likely scanned (image-only).
-// Named constant — not a magic number — makes it easy to tune later.
-const MIN_TEXT_LENGTH = 100;
+// A real text PDF always has more than this.
+// If we get less, it's almost certainly scanned (image-only).
+const SCANNED_PDF_THRESHOLD = 100;
+const BACKEND_URL = "http://127.0.0.1:8000";
 
 // ── Return type of the hook ───────────────────────────────────────────────────
 export interface PDFParseResult {
@@ -26,6 +27,7 @@ export interface PDFParseResult {
 export interface UsePDFParserReturn {
   parseFile: (file: File) => Promise<PDFParseResult | null>;
   isLoading: boolean;
+  statusText: string | null;
   error: string | null;
   clearError: () => void;
 }
@@ -33,6 +35,7 @@ export interface UsePDFParserReturn {
 // ── The Hook ─────────────────────────────────────────────────────────────────
 export function usePDFParser(): UsePDFParserReturn {
   const [isLoading, setIsLoading] = useState(false);
+  const [statusText, setStatusText] = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
 
   // clearError lets the UI dismiss any error message the user has already read
@@ -66,6 +69,7 @@ export function usePDFParser(): UsePDFParserReturn {
     }
 
     setIsLoading(true);
+    setStatusText("Parsing locally...");
     setError(null);
 
     try {
@@ -111,12 +115,48 @@ export function usePDFParser(): UsePDFParserReturn {
       // stays in memory for the entire browser session.
       await pdf.destroy();
 
+      // ── HYBRID FALLBACK: Server-side parsing ──────────────────────────
+      // If the text is very short, it's likely a scanned document.
+      // We fall back to the backend PyMuPDF parser.
+      if (fullText.length < SCANNED_PDF_THRESHOLD) {
+        setStatusText("Uploading for advanced parsing...");
+        
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const response = await fetch(`${BACKEND_URL}/api/upload-pdf`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || "Server parsing failed.");
+          }
+
+          const data = await response.json();
+          
+          return {
+            text:      data.content,
+            fileName:  data.source_id,
+            pageCount: data.page_count,
+            isScanned: true, // We know it was scanned because it hit the fallback
+          };
+        } catch (serverErr: any) {
+          console.error("[usePDFParser] Server fallback failed:", serverErr);
+          // If the server fails, we'll just fall through and return the 
+          // (likely useless) local text, but we'll show an error.
+          setError(`Advanced parsing failed: ${serverErr.message}`);
+          return null; // Return null instead of the bad text
+        }
+      }
+
       return {
         text:      fullText,
         fileName:  file.name,
         pageCount: pageCount,
-        // If the extracted text is very short, the PDF is likely scanned
-        isScanned: fullText.length < MIN_TEXT_LENGTH,
+        isScanned: false,
       };
 
     } catch (err: any) {
@@ -132,10 +172,11 @@ export function usePDFParser(): UsePDFParserReturn {
       return null;
 
     } finally {
-      // Always reset loading — even if parsing failed
+      // Always reset loading states — even if parsing failed
       setIsLoading(false);
+      setStatusText(null);
     }
   }, []);
 
-  return { parseFile, isLoading, error, clearError };
+  return { parseFile, isLoading, statusText, error, clearError };
 }
