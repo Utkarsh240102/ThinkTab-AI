@@ -26,8 +26,12 @@ Score how relevant EACH chunk is to answering the question on a scale of 0.0 to 
   0.0 = completely irrelevant or off-topic
   1.0 = contains the exact answer or highly relevant facts
 
-Return a JSON list of scores in the EXACT SAME ORDER as the chunks provided.
-If there are 4 chunks, return exactly 4 scores.
+CRITICAL COUNTING RULE:
+- Count how many chunks are labeled "Chunk X of Y" in the input.
+- You MUST return exactly that many scores — one score per chunk, in order.
+- Never return more or fewer scores than the number of chunks provided.
+- If there are 8 chunks labeled "Chunk 1 of 8" through "Chunk 8 of 8", return exactly 8 scores.
+
 Return only the structured JSON."""
 
 
@@ -52,10 +56,11 @@ def eval_docs(state: GraphState) -> GraphState:
 
     print(f"[CRAG Evaluator] Batch-grading {len(docs)} chunks in 1 LLM call...")
 
-    # Build the numbered list prompt — same format as fast_mode batch CRAG
+    # Format each chunk with explicit "X of Y" numbering so the LLM
+    # always knows the total count it must match with its scores
     chunks_text = ""
     for i, doc in enumerate(docs):
-        chunks_text += f"\n[{i}] {doc.page_content}\n"
+        chunks_text += f"\nChunk {i+1} of {len(docs)}: {doc.page_content}\n"
 
     messages = [
         SystemMessage(content=CRAG_SYSTEM_PROMPT),
