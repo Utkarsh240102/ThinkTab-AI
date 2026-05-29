@@ -1,4 +1,5 @@
 import hashlib
+import threading
 from collections import OrderedDict
 from langchain_community.vectorstores import FAISS
 from app.services.embedder import chunk_and_embed
@@ -26,6 +27,11 @@ class LRUEmbeddingCache:
         # Needed so we can evict by source_id (the cache key is a content hash,
         # not the source_id, so we need this map to find the right entry to delete)
         self.source_id_to_key: dict[str, str] = {}
+        # RLock (reentrant) allows the same thread to acquire the lock multiple
+        # times without deadlocking. This is critical because get_or_embed()
+        # calls both get() and set(), which are themselves locked.
+        # Without this, concurrent requests can corrupt the OrderedDict.
+        self._lock = threading.RLock()
 
     def _make_key(self, content: str, source_id: str = "") -> str:
         """
@@ -50,12 +56,12 @@ class LRUEmbeddingCache:
         treated as the "most recently used" (preventing it from being evicted soon).
         """
         key = self._make_key(content, source_id)
-
-        if key in self.cache:
-            # Move to end = mark as recently used
-            self.cache.move_to_end(key)
-            print(f"[Cache HIT] Reusing existing FAISS index for hash {key[:8]}...")
-            return self.cache[key]
+        with self._lock:
+            if key in self.cache:
+                # Move to end = mark as recently used
+                self.cache.move_to_end(key)
+                print(f"[Cache HIT] Reusing existing FAISS index for hash {key[:8]}...")
+                return self.cache[key]
 
         print(f"[Cache MISS] No cached index found for hash {key[:8]}...")
         return None
@@ -69,35 +75,40 @@ class LRUEmbeddingCache:
         """
         key = self._make_key(content, source_id)
 
-        # If already cached, just return it (shouldn't normally happen if
-        # you call get() first, but this is a safe guard)
-        if key in self.cache:
-            self.cache.move_to_end(key)
-            return self.cache[key]
+        with self._lock:
+            # Guard: already cached — return without re-embedding
+            if key in self.cache:
+                self.cache.move_to_end(key)
+                return self.cache[key]
 
-        # Evict the oldest entry if we are at capacity
-        if len(self.cache) >= self.max_size:
-            evicted_key, _ = self.cache.popitem(last=False)  # Remove from START (oldest)
-            print(f"[Cache EVICT] Cache full ({self.max_size} pages). Removed oldest entry {evicted_key[:8]}...")
-            # Also clean up the reverse lookup so it doesn't grow unbounded
-            self.source_id_to_key = {
-                sid: k for sid, k in self.source_id_to_key.items() if k != evicted_key
-            }
+            # Evict the oldest entry if we are at capacity
+            if len(self.cache) >= self.max_size:
+                evicted_key, _ = self.cache.popitem(last=False)  # Remove from START (oldest)
+                print(f"[Cache EVICT] Cache full ({self.max_size} pages). Removed oldest entry {evicted_key[:8]}...")
+                # Also clean up the reverse lookup so it doesn't grow unbounded
+                self.source_id_to_key = {
+                    sid: k for sid, k in self.source_id_to_key.items() if k != evicted_key
+                }
 
-        # ── Evict the OLD entry for this source_id if the content has changed ──
-        # Without this, updating a page creates a ghost entry in the cache:
-        #   Old key stays in self.cache (wasting a slot) even though source_id_to_key
-        #   now points to the new key. Over time, ghosts can fill up to 50% of the cache.
-        old_key = self.source_id_to_key.get(source_id)
-        if old_key and old_key != key and old_key in self.cache:
-            del self.cache[old_key]
-            print(f"[Cache UPDATE] Content changed for '{source_id}'. Evicted stale entry {old_key[:8]}...")
+            # Evict stale entry for this source_id if the content has changed
+            old_key = self.source_id_to_key.get(source_id)
+            if old_key and old_key != key and old_key in self.cache:
+                del self.cache[old_key]
+                print(f"[Cache UPDATE] Content changed for '{source_id}'. Evicted stale entry {old_key[:8]}...")
 
-        # Embed the new content and store it
+        # ── Embed OUTSIDE the lock ─────────────────────────────────────────────
+        # chunk_and_embed is CPU-bound and can take seconds. Holding the lock
+        # during embedding would block ALL concurrent reads for that entire time.
+        # Instead, we embed freely and re-acquire the lock only to write the result.
         print(f"[Cache SET] Embedding new content for source '{source_id}'...")
         faiss_index = chunk_and_embed(content, source_id)
-        self.cache[key] = faiss_index
-        self.source_id_to_key[source_id] = key  # Register in reverse lookup
+
+        with self._lock:
+            # Double-check: another thread may have embedded the same content
+            # while we were working. Only write if the slot is still empty.
+            if key not in self.cache:
+                self.cache[key] = faiss_index
+                self.source_id_to_key[source_id] = key  # Register in reverse lookup
 
         return faiss_index
 
@@ -128,21 +139,23 @@ class LRUEmbeddingCache:
         This is called by DELETE /api/cache/{source_id} so the Chrome Extension
         can force-refresh a page when its content has changed.
         """
-        key = self.source_id_to_key.get(source_id)
-        if key is None:
-            print(f"[Cache DELETE] source_id '{source_id}' not found in cache.")
-            return False
+        with self._lock:
+            key = self.source_id_to_key.get(source_id)
+            if key is None:
+                print(f"[Cache DELETE] source_id '{source_id}' not found in cache.")
+                return False
 
-        if key in self.cache:
-            del self.cache[key]
-        del self.source_id_to_key[source_id]
-        print(f"[Cache DELETE] Evicted '{source_id}' (hash {key[:8]}...) from cache.")
-        return True
+            if key in self.cache:
+                del self.cache[key]
+            del self.source_id_to_key[source_id]
+            print(f"[Cache DELETE] Evicted '{source_id}' (hash {key[:8]}...) from cache.")
+            return True
 
     @property
     def size(self) -> int:
         """Returns how many entries are currently in the cache."""
-        return len(self.cache)
+        with self._lock:
+            return len(self.cache)
 
 
 # ─────────────────────────────────────────────────────────────
