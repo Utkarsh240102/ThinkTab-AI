@@ -74,5 +74,5 @@ Thumbs.db
 # ===========================
 *.log
 logs/
-
+bugs.md
 plan.md
