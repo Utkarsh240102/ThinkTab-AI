@@ -1,9 +1,4 @@
-import os
-from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
-
-# Load .env from the root project directory (ThinkTab-AI/.env)
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../../.env"))
 
 class Settings(BaseSettings):
     # API Keys
