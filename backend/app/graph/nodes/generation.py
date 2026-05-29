@@ -10,7 +10,7 @@ from app.graph.state import GraphState
 # Structured Output Schema
 # ─────────────────────────────────────────────────────────────
 class EvidenceItem(BaseModel):
-    source: str = Field(description="The source_id of the document used, e.g. 'stripe.com'")
+    source_id: str = Field(description="The source_id of the document used (e.g. 'Active Tab', 'report.pdf'). Must match the source_id from the context exactly.")
     snippet: str = Field(description="The exact sentence or short phrase used as evidence")
 
 
