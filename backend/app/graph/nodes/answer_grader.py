@@ -25,16 +25,15 @@ usefulness_checker = fast_llm.with_structured_output(UsefulnessVerdict)
 # ─────────────────────────────────────────────────────────────
 # System Prompt
 # ─────────────────────────────────────────────────────────────
-USEFULNESS_SYSTEM_PROMPT = """You are an answer quality evaluator. Your job is to check if an AI-generated answer actually resolves the user's question.
+USEFULNESS_SYSTEM_PROMPT = """You are a practical answer quality evaluator. Your job is to check if an AI-generated answer is useful to the user — not whether it's perfect.
 
 Rules:
-- Answer 'yes' if the answer directly addresses what the user asked.
-- Answer 'no' if the answer:
-    * Is off-topic
-    * Only partially answers the question
-    * Says "I don't know" or "I cannot find the answer"
-    * Answers a different question than what was asked
-- Be strict but fair. A partial answer that covers the main intent is still 'yes'."""
+- Answer 'yes' if the answer makes a genuine attempt to address what the user asked.
+- Answer 'yes' for summaries, even if they don't cover 100% of the source material. A summary of key points IS a valid summary.
+- Answer 'yes' for word-count requests (e.g. "give me 100 words") even if the count is approximate.
+- Answer 'yes' for evaluations and ratings based on provided content (e.g. "rate my resume").
+- Answer 'no' ONLY if the answer is completely off-topic, or refuses to answer entirely (e.g. "I cannot find this").
+- Do NOT say 'no' just because the answer could be longer or more complete."""
 
 
 def check_usefulness(state: GraphState) -> GraphState:
