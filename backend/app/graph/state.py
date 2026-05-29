@@ -23,7 +23,7 @@ class GraphState(TypedDict):
     mode: Literal["fast", "deep", "auto"]
     # The mode the user selected in the Chrome Extension
 
-    selected_mode: Optional[Literal["fast", "deep"]]
+    selected_mode: Optional[Literal["fast", "deep", "chat"]]
     # What the Auto Router resolved the mode to (only set when mode="auto")
 
     chat_history: Optional[List[dict]]
