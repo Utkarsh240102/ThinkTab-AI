@@ -1,5 +1,6 @@
 import json
 import asyncio
+import re
 import fitz                                          # PyMuPDF — server-side PDF parser
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
@@ -334,17 +335,22 @@ async def chat(request: ChatRequest):
 
         except Exception as e:
             import traceback
+            # Log the full error server-side for debugging
             print(f"[Event Stream Error] {traceback.format_exc()}")
+            # Sanitize the error message before sending to the client —
+            # prevents API keys from leaking in error bodies (e.g. Groq/OpenRouter errors)
+            _raw = str(e)
+            _safe = re.sub(r'(sk-|key-|Bearer )[a-zA-Z0-9\-_\.]+', '[REDACTED]', _raw)
             yield sse_event({
                 "type": "error",
-                "value": f"An internal error occurred: {str(e)}"
+                "value": f"An internal error occurred: {_safe}"
             })
             yield sse_event({
                 "type": "final",
                 "answer": "An internal error occurred. Please try again.",
                 "evidence": [],
                 "confidence_score": 0.0,
-                "reasoning_summary": f"Error Details: {str(e)}"
+                "reasoning_summary": f"Error Details: {_safe}"
             })
 
     return StreamingResponse(
