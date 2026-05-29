@@ -50,27 +50,23 @@ def route_query(state: GraphState) -> Literal["chat", "fast", "deep"]:
     """
     Auto Mode Router: Decides whether to use Chat Bypass, Fast Mode, or Deep Mode.
 
-    Uses a 3-tier cascading decision tree for minimal latency:
-    Tier 1: Context count check (0ms)
-    Tier 2: Keyword rule check (0ms)
-    Tier 3: LLM intent classification (~300ms) — now with "chat" detection
+    Uses a 2-tier cascading decision tree for minimal latency:
+    Tier 1: Keyword rule check (0ms)
+    Tier 2: LLM intent classification (~300ms) — with "chat" detection
+
+    NOTE: Context count is intentionally NOT used to decide mode.
+    A user with a PDF attached should still get Fast Mode for simple questions.
+    Query complexity is judged by content (keywords + LLM), not document count.
     """
     query = state["query"].lower().strip()
-    contexts = state.get("contexts", [])
 
-    # ── Tier 1: Document Count Check (0ms) ──────────────────────────────
-    # Multiple contexts = user is researching across sources = Deep Mode
-    if len(contexts) > 1:
-        print("[Auto Router] > 1 contexts found. Routing to DEEP.")
-        return "deep"
-
-    # ── Tier 2: Keyword Rule Check (0ms) ────────────────────────────────
+    # ── Tier 1: Keyword Rule Check (0ms) ────────────────────────────────
     # Explicit deep-reasoning keywords → skip to Deep Mode immediately
     if any(keyword in query for keyword in DEEP_MODE_SIGNALS):
         print("[Auto Router] Complex keyword detected. Routing to DEEP.")
         return "deep"
 
-    # ── Tier 3: LLM Intent Classifier (~300ms) ──────────────────────────
+    # ── Tier 2: LLM Intent Classifier (~300ms) ──────────────────────────
     # Ask gpt-4o-mini to classify into chat / simple / complex
     print("[Auto Router] Using LLM to classify intent...")
     messages = [
