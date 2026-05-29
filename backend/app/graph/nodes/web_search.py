@@ -100,8 +100,9 @@ def rewrite_for_web(state: GraphState) -> GraphState:
 
     recent_history = chat_history[-4:]
     history_text = "\n".join([
-        f"{msg['role'].capitalize()}: {msg['content']}"
+        f"{msg.get('role', 'user').capitalize()}: {msg.get('content', '')}"
         for msg in recent_history
+        if msg.get("content")  # skip empty or malformed messages
     ])
 
     prompt = f"""Conversation history:
