@@ -1,5 +1,7 @@
 from typing import List
+# pyrefly: ignore [missing-import]
 from langchain_core.messages import SystemMessage, HumanMessage
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 
 from app.services.llm_service import smart_llm
