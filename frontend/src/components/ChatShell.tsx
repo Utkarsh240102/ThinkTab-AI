@@ -101,30 +101,65 @@ export default function ChatShell() {
   /* ── Reusable Tab Scraper ── */
   async function scrapeActiveTab(): Promise<any[]> {
     let scrapedContexts: any[] = [];
-    if (typeof chrome !== "undefined" && chrome.tabs) {
-      try {
-        const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
-          chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve);
-        });
+    if (typeof chrome === "undefined" || !chrome.tabs) return scrapedContexts;
 
-        if (activeTab && activeTab.id) {
-          const response = await new Promise<any>((resolve) => {
-            chrome.tabs.sendMessage(activeTab.id!, { action: "SCRAPE_PAGE_CONTEXT" }, resolve);
+    try {
+      const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve);
+      });
+
+      if (!activeTab?.id) return scrapedContexts;
+      const tabId = activeTab.id;
+
+      // Helper: send a scrape message and resolve null on any error
+      // (null means the content script is not present in this tab)
+      function sendScrapeMessage(id: number): Promise<any> {
+        return new Promise((resolve) => {
+          chrome.tabs.sendMessage(id, { action: "SCRAPE_PAGE_CONTEXT" }, (response) => {
+            if (chrome.runtime.lastError) {
+              // "Could not establish connection" → content.js not injected in this tab yet
+              resolve(null);
+            } else {
+              resolve(response);
+            }
           });
-          
-          if (response && response.contexts) {
-            scrapedContexts = response.contexts.map((str: string) => ({
-              source_id: `Active Tab`,
-              content: str
-            }));
-          }
-        }
-      } catch (err) {
-        console.warn("Could not scrape tab context:", err);
+        });
       }
+
+      let response = await sendScrapeMessage(tabId);
+
+      // ── Injection Fallback ──────────────────────────────────────────────
+      // If response is null the tab was open before the extension was installed
+      // (i.e., it never got the content.js "earpiece"). We inject it now and retry.
+      if (response === null && chrome.scripting) {
+        console.warn("[ThinkTab] Content script not found in this tab. Injecting now...");
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ["content.js"],
+          });
+          // Brief pause so the script can register its message listener
+          await new Promise((r) => setTimeout(r, 200));
+          response = await sendScrapeMessage(tabId);
+        } catch (injectionError) {
+          // chrome:// pages, extension pages, and PDFs cannot be injected — skip silently
+          console.warn("[ThinkTab] Could not inject content script (restricted page):", injectionError);
+        }
+      }
+
+      if (response?.contexts) {
+        scrapedContexts = response.contexts.map((str: string) => ({
+          source_id: `Active Tab`,
+          content: str,
+        }));
+      }
+    } catch (err) {
+      console.warn("Could not scrape tab context:", err);
     }
+
     return scrapedContexts;
   }
+
 
   /* ── Pre-embed on Extension Open ── */
   useEffect(() => {
