@@ -94,7 +94,11 @@ export function useSSEChat() {
           query,
           mode,
           contexts,
-          chat_history: chatHistory,
+          // Cap history at the last 10 messages (5 turns) to stay within
+          // the LLM context window. Older messages are still visible in the UI
+          // but are not sent to the backend. A rolling-summary approach is tracked
+          // as a future enhancement (BUG-007b).
+          chat_history: chatHistory.slice(-10),
         }),
         signal: abortRef.current.signal,
       });
