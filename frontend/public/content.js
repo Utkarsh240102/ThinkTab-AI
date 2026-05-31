@@ -15,26 +15,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // 1. Grab the official page title
     const pageTitle = document.title || "Untitled Page";
     
-    // 2. Grab all paragraph text on the page
-    // We target <p> tags instead of document.body.innerText to avoid 
-    // scraping hidden script tags, raw HTML, or massive ad blocks.
-    const paragraphs = Array.from(document.querySelectorAll("p"))
-      .map(p => p.innerText.trim())
-      // Filter out tiny snippets or empty tags (likely UI elements)
+    // 2. Grab text from ALL meaningful semantic elements — not just <p>.
+    // Modern web apps (React, Vue, Angular, GitHub, Reddit, StackOverflow)
+    // rarely put their content in <p> tags. We cast a wider net here so
+    // we reliably capture content regardless of the site's HTML structure.
+    const CONTENT_SELECTOR = "p, article, section, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, code";
+    const elements = Array.from(document.querySelectorAll(CONTENT_SELECTOR))
+      .map(el => el.innerText.trim())
+      // Filter out tiny snippets, empty tags, and nav/button labels (likely UI noise)
       .filter(text => text.length > 40);
     
-    // 3. Assemble the payload
-    // We push the Title in first so the AI knows exactly what site we are on
-    const contextsArray = [`Page Title: ${pageTitle}`, ...paragraphs];
+    // 3. Assemble the payload — title first so the AI knows what site we are on
+    const contextsArray = [`Page Title: ${pageTitle}`, ...elements];
     
-    // Limit to 8 entries before merging
-    const limitedContexts = contextsArray.slice(0, 8);
+    // Use a CHARACTER BUDGET instead of a hard entry count.
+    // A budget of 15,000 chars is enough for the embedding model to work well
+    // without overwhelming the FAISS index or the LLM context window.
+    // Short pages may contribute 40+ entries; long pages maybe 10 — always ~15k chars.
+    const MAX_CHARS = 15000;
+    let totalChars = 0;
+    const limitedContexts = [];
+    for (const entry of contextsArray) {
+      if (totalChars + entry.length > MAX_CHARS) break;
+      limitedContexts.push(entry);
+      totalChars += entry.length;
+    }
 
-    // IMPORTANT: Merge all paragraphs into ONE string before sending.
+    // IMPORTANT: Merge all entries into ONE string before sending.
     // The backend creates a separate FAISS embedding job per context item.
-    // Sending 8 separate items = 8 API calls = quota exhausted instantly.
+    // Sending N separate items = N API calls = quota exhausted instantly.
     // Merging into 1 item = 1 API call = safely within free tier limits.
     const mergedContext = limitedContexts.join("\n\n");
+
 
     // Send it back to React as a single-item array
     sendResponse({ contexts: [mergedContext] });
