@@ -47,6 +47,7 @@ export default function ChatShell() {
   const bottomRef  = useRef<HTMLDivElement>(null);
   // Hidden file input ref — we programmatically click it when the 📎 button is pressed
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const embedReadyRef = useRef<boolean>(false);
 
   /* PDF context: null = no PDF loaded, object = a PDF is attached */
   const [pdfContext, setPdfContext] = useState<{ source_id: string; content: string } | null>(null);
@@ -178,6 +179,8 @@ export default function ChatShell() {
           console.warn("Failed to pre-embed page:", err);
         }
       }
+      // Always mark as ready, even if no content or error, so we don't block chat forever
+      embedReadyRef.current = true;
     }
     preEmbedPage();
   }, []);
@@ -212,6 +215,18 @@ export default function ChatShell() {
     const allContexts = [...scrapedContexts];
     if (pdfContext) {
       allContexts.push(pdfContext);
+    }
+
+    /* ── Await Pre-Embed Completion (Anti-Race Condition) ── */
+    // If the user types instantly upon opening the extension, the background
+    // pre-embed task might still be running. If we send the query now, the
+    // FAISS index will be empty. Wait up to 3 seconds for it to finish.
+    if (!embedReadyRef.current) {
+      console.log("⏳ Waiting for initial page embed to finish...");
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 100));
+        if (embedReadyRef.current) break;
+      }
     }
 
     /* Fire the backend call with all available contexts */
