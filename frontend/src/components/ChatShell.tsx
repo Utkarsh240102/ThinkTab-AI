@@ -78,7 +78,7 @@ export default function ChatShell() {
     // The backend payload is independently capped at slice(-10) in useSSEChat.ts.
     setChatHistory((prev) => [
       ...prev,
-      { role: "assistant", content: finalAnswer.answer },
+      { role: "assistant" as const, content: finalAnswer.answer },
     ].slice(-60));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalAnswer]);
@@ -205,7 +205,7 @@ export default function ChatShell() {
     // The backend payload is independently capped at slice(-10) in useSSEChat.ts.
     const updatedHistory: ChatHistoryItem[] = [
       ...chatHistory,
-      { role: "user", content: query.trim() },
+      { role: "user" as const, content: query.trim() },
     ].slice(-60);
     setChatHistory(updatedHistory);
     setLastQuery(query.trim());
