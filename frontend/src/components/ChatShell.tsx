@@ -298,11 +298,16 @@ export default function ChatShell() {
                     /* ── System Error Bubble ── */
                     <ErrorBubble 
                       message={msg.message} 
-                      onRetry={() => {
-                        // Re-fire the last known query without adding a new user message to the UI
-                        abort(); 
-                        sendQuery(lastQuery, selectedMode, [], chatHistory);
-                      }} 
+                      onRetry={async () => {
+                        // BUG-003 FIX: Re-scrape the active tab so retry has real page content.
+                        // Previously passed [] which caused retrieval to always fail and
+                        // forced unnecessary web search fallback on every error retry.
+                        abort();
+                        const scrapedContexts = await scrapeActiveTab();
+                        const allContexts = [...scrapedContexts];
+                        if (pdfContext) allContexts.push(pdfContext);
+                        sendQuery(lastQuery, selectedMode, allContexts, chatHistory);
+                      }}
                     />
                   ) : msg.role === "user" ? (
                     /* ── User bubble ── */
