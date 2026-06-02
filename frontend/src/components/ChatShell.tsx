@@ -236,10 +236,16 @@ export default function ChatShell() {
   }
 
   /* ── Soft HITL Logic: Cancel and Switch to Deep ── */
-  function handleSwitchToDeep() {
+  async function handleSwitchToDeep() {
     abort(); // Immediately kill the Fast stream if still running
     setSelectedMode("deep");
-    sendQuery(lastQuery, "deep", [], chatHistory);
+    // BUG-002 FIX: Re-scrape the active tab so Deep Mode has real page content.
+    // Previously this passed [] which caused retrieval to always fail and
+    // forced an unnecessary web search fallback on every HITL switch.
+    const scrapedContexts = await scrapeActiveTab();
+    const allContexts = [...scrapedContexts];
+    if (pdfContext) allContexts.push(pdfContext);
+    sendQuery(lastQuery, "deep", allContexts, chatHistory);
   }
 
   /* ── Clear Chat Logic ── */
