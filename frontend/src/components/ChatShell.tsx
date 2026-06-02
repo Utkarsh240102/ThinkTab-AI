@@ -74,10 +74,12 @@ export default function ChatShell() {
     setMessages((prev) => [...prev, assistantMsg]);
 
     /* Update chat history so the Contextualizer can resolve pronouns */
+    // BUG-007 FIX: Cap state at 60 messages (30 turns) to prevent memory leak.
+    // The backend payload is independently capped at slice(-10) in useSSEChat.ts.
     setChatHistory((prev) => [
       ...prev,
       { role: "assistant", content: finalAnswer.answer },
-    ]);
+    ].slice(-60));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalAnswer]);
 
@@ -199,10 +201,12 @@ export default function ChatShell() {
     setMessages((prev) => [...prev, userMsg]);
 
     /* Track in chat history for the Contextualizer */
+    // BUG-007 FIX: Cap state at 60 messages (30 turns) to prevent memory leak.
+    // The backend payload is independently capped at slice(-10) in useSSEChat.ts.
     const updatedHistory: ChatHistoryItem[] = [
       ...chatHistory,
       { role: "user", content: query.trim() },
-    ];
+    ].slice(-60);
     setChatHistory(updatedHistory);
     setLastQuery(query.trim());
 
