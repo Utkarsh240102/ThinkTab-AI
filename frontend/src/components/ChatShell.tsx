@@ -242,10 +242,14 @@ export default function ChatShell() {
   /* ── Soft HITL Logic: Cancel and Switch to Deep ── */
   async function handleSwitchToDeep() {
     abort(); // Immediately kill the Fast stream if still running
+    // BUG-016 FIX: Wait 100ms after abort() before starting the new request.
+    // The old stream's reader loop needs one event-loop tick to see the abort
+    // signal and exit cleanly. Without this pause, the new Deep Mode request
+    // can start before the old reader releases the connection, causing
+    // interleaved SSE events and duplicate assistant messages in the UI.
+    await new Promise(r => setTimeout(r, 100));
     setSelectedMode("deep");
     // BUG-002 FIX: Re-scrape the active tab so Deep Mode has real page content.
-    // Previously this passed [] which caused retrieval to always fail and
-    // forced an unnecessary web search fallback on every HITL switch.
     const scrapedContexts = await scrapeActiveTab();
     const allContexts = [...scrapedContexts];
     if (pdfContext) allContexts.push(pdfContext);
