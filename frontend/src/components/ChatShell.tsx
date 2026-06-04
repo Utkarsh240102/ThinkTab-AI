@@ -563,6 +563,7 @@ export default function ChatShell() {
             onChange={setQuery}
             onSubmit={handleSubmit}
             isLoading={isLoading}
+            onStop={abort}
           />
         </div>
       </div>
