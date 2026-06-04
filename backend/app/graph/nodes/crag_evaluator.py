@@ -54,6 +54,32 @@ def eval_docs(state: GraphState) -> GraphState:
         print("[CRAG Evaluator] No documents retrieved. Verdict: INCORRECT.")
         return {**state, "crag_verdict": "INCORRECT", "good_docs": []}
 
+    # ── BUG2-002 FIX: Summary-intent bypass ──────────────────────────────────
+    # The CRAG LLM scores chunks by asking "does this chunk answer the question?"
+    # For summarisation requests, no single chunk IS the full summary — all chunks
+    # are equally relevant. The LLM correctly scores them all 0.0, which flips the
+    # verdict to INCORRECT and wastes a Serper web-search call fetching results
+    # about "how to summarise a document" instead of using the actual local content.
+    #
+    # Fix: detect summarisation intent by keyword before calling the LLM.
+    # Assign every chunk a score of 0.8 (above UPPER_CRAG_THRESHOLD=0.7) so the
+    # verdict is immediately CORRECT and all retrieved chunks are passed through.
+    SUMMARY_KEYWORDS = [
+        "summarize", "summarise", "summary", "summaries",
+        "overview", "briefly explain", "brief overview",
+        "what does this page say", "what is this about",
+        "give me a brief", "tldr", "tl;dr",
+    ]
+    query_lower = query.lower()
+    if any(kw in query_lower for kw in SUMMARY_KEYWORDS):
+        print(f"[CRAG Evaluator] Summary intent detected. Bypassing scoring — assigning all {len(docs)} chunks score 0.8.")
+        return {
+            **state,
+            "crag_verdict": "CORRECT",
+            "good_docs": docs,
+        }
+    # ── End BUG2-002 FIX ─────────────────────────────────────────────────────
+
     print(f"[CRAG Evaluator] Batch-grading {len(docs)} chunks in 1 LLM call...")
 
     # Format each chunk with explicit "X of Y" numbering so the LLM
