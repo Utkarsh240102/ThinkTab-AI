@@ -5,9 +5,11 @@ interface QueryInputProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   isLoading: boolean;
+  /** Called when the user clicks the Stop button while a query is in flight. */
+  onStop?: () => void;
 }
 
-export default function QueryInput({ value, onChange, onSubmit, isLoading }: QueryInputProps) {
+export default function QueryInput({ value, onChange, onSubmit, isLoading, onStop }: QueryInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /* Auto-resize textarea */
@@ -59,44 +61,62 @@ export default function QueryInput({ value, onChange, onSubmit, isLoading }: Que
           }}
         />
 
-        {/* Send button */}
-        <button
-          onClick={onSubmit}
-          disabled={!canSubmit}
-          style={{
-            flexShrink: 0, width: "32px", height: "32px",
-            borderRadius: "8px", border: "none",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: canSubmit ? "pointer" : "not-allowed",
-            transition: "all 0.2s ease",
-            background: canSubmit
-              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
-              : "rgba(255,255,255,0.06)",
-            boxShadow: canSubmit ? "0 0 14px rgba(99,102,241,0.5)" : "none",
-            opacity: canSubmit ? 1 : 0.4,
-            transform: canSubmit ? "scale(1)" : "scale(0.95)",
-          }}
-          title="Send (Enter)"
-        >
-          {isLoading ? (
-            <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24"
-              fill="none" stroke="white" strokeWidth="2.5">
-              <path d="M21 12a9 9 0 1 1-6.22-8.56" strokeLinecap="round" />
+        {/* Send / Stop button — morphs into a Stop button while a query is in flight */}
+        {isLoading && onStop ? (
+          // ── Stop button: always clickable, soft red background, square icon ──
+          <button
+            onClick={onStop}
+            style={{
+              flexShrink: 0, width: "32px", height: "32px",
+              borderRadius: "8px", border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              background: "rgba(239,68,68,0.18)",
+              boxShadow: "0 0 12px rgba(239,68,68,0.35)",
+              opacity: 1,
+              transform: "scale(1)",
+            }}
+            title="Stop (cancel query)"
+          >
+            {/* Filled square = universal stop icon */}
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(239,68,68,1)">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
             </svg>
-          ) : (
+          </button>
+        ) : (
+          // ── Send button: disabled when input is empty or already loading ──
+          <button
+            onClick={onSubmit}
+            disabled={!canSubmit}
+            style={{
+              flexShrink: 0, width: "32px", height: "32px",
+              borderRadius: "8px", border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: canSubmit ? "pointer" : "not-allowed",
+              transition: "all 0.2s ease",
+              background: canSubmit
+                ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                : "rgba(255,255,255,0.06)",
+              boxShadow: canSubmit ? "0 0 14px rgba(99,102,241,0.5)" : "none",
+              opacity: canSubmit ? 1 : 0.4,
+              transform: canSubmit ? "scale(1)" : "scale(0.95)",
+            }}
+            title="Send (Enter)"
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 19V5M5 12l7-7 7 7" />
             </svg>
-          )}
-        </button>
+          </button>
+        )}
       </div>
 
       <p style={{
         textAlign: "center", fontSize: "11px",
         color: "var(--text-secondary)", opacity: 0.5, marginTop: "8px",
       }}>
-        Shift+Enter for new line · Enter to send
+        {isLoading ? "Click ⏹️ to cancel" : "Shift+Enter for new line · Enter to send"}
       </p>
     </div>
   );
