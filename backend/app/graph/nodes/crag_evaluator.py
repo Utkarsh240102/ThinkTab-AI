@@ -88,10 +88,13 @@ def eval_docs(state: GraphState) -> GraphState:
             retry_result: CRAGScoreBatch = structured_llm.invoke(retry_messages)
             scores = retry_result.scores
 
-            # If still wrong after retry, pad/trim as last resort
+            # BUG-014 FIX: pad with 0.5 (neutral) instead of 0.0 (irrelevant).
+            # 0.0 unfairly eliminates trailing chunks that the LLM simply forgot to score.
+            # 0.5 is consistent with the exception handler below (line 100) and gives
+            # those chunks a fair chance to pass the LOWER_CRAG_THRESHOLD filter.
             if len(scores) < len(docs):
-                print(f"[CRAG Evaluator] Retry still returned {len(scores)} scores. Padding remaining with 0.0")
-                scores += [0.0] * (len(docs) - len(scores))
+                print(f"[CRAG Evaluator] Retry still returned {len(scores)} scores. Padding remaining with 0.5")
+                scores += [0.5] * (len(docs) - len(scores))
             elif len(scores) > len(docs):
                 scores = scores[:len(docs)]
 
