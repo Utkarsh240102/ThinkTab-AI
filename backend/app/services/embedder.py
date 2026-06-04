@@ -36,8 +36,11 @@ print("[Embedder] BAAI/bge-m3 ready. ✅ Supports 100+ languages, 8192 token con
 # ─────────────────────────────────────────────────────────────
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=500,
-    chunk_overlap=50,
-    separators=["\n\n", "\n", ".", " ", ""],  # Tries paragraph → sentence → word splits
+    chunk_overlap=100,  # Increased from 50 → catches boundary cases like split sentences
+    # BUG FIX: removed "." from separators — period-splitting breaks decimal numbers
+    # (8.52 → "8" + ".52"), abbreviations (B.Tech, Dr.), and URLs (github.com).
+    # Falling back to " " (word boundary) instead is safer and keeps numbers intact.
+    separators=["\n\n", "\n", " ", ""],
 )
 
 
