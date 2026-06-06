@@ -276,12 +276,15 @@ async def chat(request: ChatRequest):
                 print("[Chat Bypass] Conversational query detected. Skipping RAG pipeline.")
 
                 # Build messages from chat history + current query
+                summary_text = f"\n\n[Previous Conversation Summary]: {request.history_summary}" if request.history_summary else ""
+                
                 chat_messages = [
                     SystemMessage(content=(
                         "You are ThinkTab AI, a friendly and intelligent browser assistant. "
-                        "The user is making casual conversation. Respond warmly and naturally. "
-                        "Keep your reply concise (1-3 sentences max). "
-                        "Do not mention documents, sources, or retrieval."
+                        "The user is making casual conversation or asking about the chat history. "
+                        "Respond warmly and naturally based on the provided conversation context. "
+                        "Keep your reply concise. Do not mention documents, sources, or retrieval."
+                        f"{summary_text}"
                     ))
                 ]
 
