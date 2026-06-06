@@ -32,10 +32,9 @@ CLASSIFIER_SYSTEM_PROMPT = """You are a fast query intent classifier for a RAG-b
 
 Classify every incoming user query into exactly ONE of three categories:
 
-1. "chat"    → The message is a greeting, farewell, small talk, or social pleasantry.
+1. "chat"     The message is a greeting, farewell, small talk, social pleasantry, or a meta-question asking about the conversation history.
                It does NOT need any document search or factual retrieval.
-               Examples: "hi", "hello", "hey", "how are you", "thanks", "thank you",
-               "bye", "good morning", "what's up", "you there?", "okay", "cool", "got it"
+               Examples: "hi", "how are you", "what did I ask earlier?", "summarize our chat", "what was my first question?"
 
 2. "simple"  → A direct factual question that needs a single document lookup.
                Examples: "what is the price?", "who wrote this?", "when was it founded?"
