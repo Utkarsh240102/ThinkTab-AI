@@ -30,6 +30,9 @@ class GraphState(TypedDict):
     # Last N messages: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
     # Used by the Query Contextualizer to resolve follow-up questions
 
+    history_summary: Optional[str]
+    # Rolling summary of older messages that have fallen out of chat_history window
+
     contexts: List[dict]
     # All sources sent from the frontend:
     # [{"source_id": "stripe.com", "content": "...markdown text..."}, ...]
