@@ -66,8 +66,8 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
     # pdf_signals → only search contexts where source_id != "Active Tab"
     # no signal   → search all contexts (unchanged default behaviour)
     _WEB_SIGNALS = [
-        "web page", "this page", "the tab", "active tab",
-        "the website", "the page", "current tab", "current window", "window",
+        "web page", "webpage", "this page", "the tab", "active tab",
+        "the website", "website", "the page", "current tab", "current window", "window",
     ]
     _PDF_SIGNALS = [
         "pdf", "document", "the file", "the resume",
