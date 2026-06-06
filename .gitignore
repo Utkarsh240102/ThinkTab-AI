@@ -70,12 +70,19 @@ Thumbs.db
 *.swo
 
 # ===========================
-# Logs
+# Logs & Scratchpads
 # ===========================
 *.log
 logs/
+
+# ===========================
+# Markdown Files
+# ===========================
+AGENTS.md
 bugs.md
 bugs2.md
 plan.md
-AGENTS.md
 suggestions.md
+backend_plan.md
+frontend_plan.md
+build_plan.md
