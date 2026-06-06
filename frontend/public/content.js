@@ -20,7 +20,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // rarely put their content in <p> tags. We cast a wider net here so
     // we reliably capture content regardless of the site's HTML structure.
     const CONTENT_SELECTOR = "p, article, section, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, code";
-    const elements = Array.from(document.querySelectorAll(CONTENT_SELECTOR))
+    // BUG2-005 FIX: Leaf-node deduplication ─────────────────────────────────
+    // querySelectorAll matches elements at every level of the DOM tree.
+    // For a structure like <section><p>Text</p></section>, the old code
+    // extracted "Text" twice: once from <section> and once from <p>.
+    // On content-heavy pages (Wikipedia, docs sites) this wasted 30-50% of
+    // the 15,000-char budget on near-identical repeated text blocks.
+    //
+    // Fix: build a Set of all matched nodes, then keep only "leaf" elements —
+    // those that do NOT contain any other matched element as a descendant.
+    // This ensures we always extract text from the most specific (deepest)
+    // match, never from an ancestor that would duplicate its children's text.
+    const allNodes = document.querySelectorAll(CONTENT_SELECTOR);
+    const allMatched = new Set(allNodes);
+    const leafElements = Array.from(allNodes).filter(el => {
+      // querySelectorAll on the element itself finds all matched descendants.
+      // If any exist in allMatched, this element is a parent — skip it.
+      const children = el.querySelectorAll(CONTENT_SELECTOR);
+      return !Array.from(children).some(child => allMatched.has(child));
+    });
+
+    const elements = leafElements
       .map(el => el.innerText.trim())
       // Filter out tiny snippets, empty tags, and nav/button labels (likely UI noise)
       .filter(text => text.length > 40);

@@ -43,6 +43,7 @@ export default function ChatShell() {
   const [messages,     setMessages]     = useState<Message[]>([]);
   const [selectedMode, setSelectedMode] = useState<Mode>("auto");
   const [chatHistory,  setChatHistory]  = useState<ChatHistoryItem[]>([]);
+  const [historySummary, setHistorySummary] = useState("");
   const [lastQuery,    setLastQuery]    = useState("");
   const bottomRef  = useRef<HTMLDivElement>(null);
   // Hidden file input ref — we programmatically click it when the 📎 button is pressed
@@ -93,6 +94,38 @@ export default function ChatShell() {
     };
     setMessages((prev) => [...prev, errMsg]);
   }, [error]);
+
+  useEffect(() => {
+    if (chatHistory.length > 10) {
+      const messagesToDrop = chatHistory.slice(
+        0,
+        chatHistory.length - 10
+      );
+
+      fetch(`${BACKEND_URL}/api/summarize-history`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          old_messages: messagesToDrop,
+          current_summary: historySummary || null
+        })
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.summary) {
+            setHistorySummary(data.summary);
+          }
+        })
+        .catch((err) =>
+          console.warn(
+            "Background summarization failed:",
+            err
+          )
+        );
+    }
+  }, [chatHistory]);
 
   /* Auto-scroll to bottom on new messages or status */
   useEffect(() => {
@@ -210,8 +243,24 @@ export default function ChatShell() {
     setChatHistory(updatedHistory);
     setLastQuery(query.trim());
 
-    /* ── Scrape the active webpage context ── */
-    const scrapedContexts = await scrapeActiveTab();
+    /* ── Scrape and Wait for Embed in Parallel (BUG2-006 fix) ── */
+    // Previously: scrape ran first, THEN the embed-wait loop ran sequentially.
+    // Now: both run concurrently with Promise.all — wall-clock time is
+    // max(scrape, embed-wait) instead of scrape + embed-wait.
+    const waitForEmbed = async () => {
+      if (!embedReadyRef.current) {
+        console.log("⏳ Waiting for initial page embed to finish...");
+        for (let i = 0; i < 30; i++) {
+          await new Promise(r => setTimeout(r, 100));
+          if (embedReadyRef.current) break;
+        }
+      }
+    };
+
+    const [scrapedContexts] = await Promise.all([
+      scrapeActiveTab(),
+      waitForEmbed(),
+    ]);
 
     /* ── Merge webpage + PDF contexts ── */
     // We MERGE both — not replace — so the RAG pipeline can search
@@ -221,20 +270,8 @@ export default function ChatShell() {
       allContexts.push(pdfContext);
     }
 
-    /* ── Await Pre-Embed Completion (Anti-Race Condition) ── */
-    // If the user types instantly upon opening the extension, the background
-    // pre-embed task might still be running. If we send the query now, the
-    // FAISS index will be empty. Wait up to 3 seconds for it to finish.
-    if (!embedReadyRef.current) {
-      console.log("⏳ Waiting for initial page embed to finish...");
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 100));
-        if (embedReadyRef.current) break;
-      }
-    }
-
     /* Fire the backend call with all available contexts */
-    sendQuery(query.trim(), selectedMode, allContexts, updatedHistory);
+    sendQuery(query.trim(), selectedMode, allContexts, updatedHistory, historySummary);
 
     setQuery("");
   }

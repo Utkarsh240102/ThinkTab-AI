@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pydantic import BaseModel, Field
 from typing import List, AsyncGenerator
@@ -78,19 +79,19 @@ async def run_fast_mode(initial_state: GraphState) -> AsyncGenerator[str, None]:
     # so showing a status event would cause a confusing flicker with nothing behind it.
     if initial_state.get("chat_history"):
         yield sse("status", {"value": "Understanding question... 🤔"})
-    state = contextualize_query(state)
+    state = await asyncio.to_thread(contextualize_query, state)
 
     # Step 2: Retrieve & Re-rank
     yield sse("status", {"value": "Retrieving relevant paragraphs... "})
-    state = retrieve_and_rerank(state)
+    state = await asyncio.to_thread(retrieve_and_rerank, state)
 
     # Step 3: Fast CRAG Filter
     yield sse("status", {"value": "Filtering out noise... "})
-    state = batch_crag_filter(state)
+    state = await asyncio.to_thread(batch_crag_filter, state)
 
     # Step 4: Generate Answer
     yield sse("status", {"value": "Writing answer... "})
-    state = generate_fast(state)
+    state = await asyncio.to_thread(generate_fast, state)
 
     # Always yield the final event.
     # Safety-net detection (answer == "I cannot find the answer on this page.")

@@ -73,6 +73,7 @@ export function useSSEChat() {
     mode:        "auto" | "fast" | "deep",
     contexts:    Context[]         = [],
     chatHistory: ChatHistoryItem[] = [],
+    historySummary: string = ""
   ) => {
     /* Cancel any previous streaming request first */
     abortRef.current?.abort();
@@ -99,6 +100,7 @@ export function useSSEChat() {
           // but are not sent to the backend. A rolling-summary approach is tracked
           // as a future enhancement (BUG-007b).
           chat_history: chatHistory.slice(-10),
+          history_summary: historySummary,
         }),
         signal: abortRef.current.signal,
       });

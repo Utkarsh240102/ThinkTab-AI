@@ -55,10 +55,51 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
 
     all_docs: list[Document] = []
 
+    # ── BUG2-003 FIX: Source-intent filtering ────────────────────────────────
+    # When a user explicitly names a source ("summarize the web page", "read
+    # the PDF"), restricting retrieval to only that source prevents the
+    # re-ranker from pulling chunks from the wrong place (e.g. PDF chunks
+    # winning over Active Tab chunks when the user asked about the web page).
+    #
+    # Detection uses simple substring matching on the lowercased query.
+    # web_signals → only search contexts where source_id == "Active Tab"
+    # pdf_signals → only search contexts where source_id != "Active Tab"
+    # no signal   → search all contexts (unchanged default behaviour)
+    _WEB_SIGNALS = [
+        "web page", "webpage", "this page", "the tab", "active tab",
+        "the website", "website", "the page", "current tab", "current window", "window",
+    ]
+    _PDF_SIGNALS = [
+        "pdf", "document", "the file", "the resume",
+        "the attachment", "uploaded file", "attached file", "the pdf",
+    ]
+    _query_lower = query.lower()
+    if any(kw in _query_lower for kw in _WEB_SIGNALS):
+        source_filter = "web"
+        print("[Retrieval] Source intent: WEB PAGE only")
+    elif any(kw in _query_lower for kw in _PDF_SIGNALS):
+        source_filter = "pdf"
+        print("[Retrieval] Source intent: PDF only")
+    else:
+        source_filter = None
+        print("[Retrieval] Source intent: all sources")
+    # ── End BUG2-003 FIX ─────────────────────────────────────────────────────
+
     # Step 1: Retrieve top K chunks from each source
     for ctx in contexts:
         source_id = ctx["source_id"]
         content = ctx["content"]
+
+        # ── Source-intent gate ────────────────────────────────────────────────
+        # Skip this context if it doesn't match the source the user asked about.
+        # "Active Tab" is the canonical source_id set by content.js / ChatShell.
+        if source_filter == "web" and source_id != "Active Tab":
+            print(f"[Retrieval] Skipping '{source_id}' (web-only intent)")
+            continue
+        if source_filter == "pdf" and source_id == "Active Tab":
+            print(f"[Retrieval] Skipping '{source_id}' (pdf-only intent)")
+            continue
+        # ── End source-intent gate ────────────────────────────────────────────
 
         # Guard: skip empty or whitespace-only content — FAISS.from_documents
         # crashes with IndexError when there are no chunks to embed

@@ -53,6 +53,7 @@ class ChatRequest(BaseModel):
     mode: Literal["fast", "deep", "auto"] = "auto"  # Validated: rejects anything else with 422
     contexts: List[ContextItem] = []
     chat_history: Optional[List[ChatMessage]] = []
+    history_summary: Optional[str] = None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -166,6 +167,39 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 
 # ─────────────────────────────────────────────────────────────
+# Summarize History Route
+# ─────────────────────────────────────────────────────────────
+
+class SummarizeHistoryRequest(BaseModel):
+    old_messages: List[ChatMessage]
+    current_summary: Optional[str] = None
+
+@router.post("/summarize-history")
+async def summarize_history(req: SummarizeHistoryRequest):
+    msg_text = "\n".join(
+        [f"{m.role}: {m.content}" for m in req.old_messages]
+    )
+
+    prompt = (
+        "Summarize the following chat messages into a short, concise paragraph. "
+        "Focus purely on preserving the user's original goals, context, and constraints.\n\n"
+    )
+
+    if req.current_summary:
+        prompt += f"Previous Summary: {req.current_summary}\n\n"
+
+    prompt += f"New Messages to incorporate:\n{msg_text}"
+
+    # Run in a thread to avoid blocking the event loop
+    response = await asyncio.to_thread(
+        fast_llm.invoke,
+        [HumanMessage(content=prompt)]
+    )
+
+    return {"summary": response.content}
+
+
+# ─────────────────────────────────────────────────────────────
 # Main Streaming Route
 # ─────────────────────────────────────────────────────────────
 
@@ -200,6 +234,7 @@ async def chat(request: ChatRequest):
                 "mode": request.mode,
                 "selected_mode": None,
                 "chat_history": [msg.model_dump() for msg in request.chat_history] if request.chat_history else [],
+                "history_summary": request.history_summary,
                 "contexts": [ctx.model_dump() for ctx in request.contexts] if request.contexts else [],
                 "docs": [],
                 "good_docs": [],
@@ -241,12 +276,15 @@ async def chat(request: ChatRequest):
                 print("[Chat Bypass] Conversational query detected. Skipping RAG pipeline.")
 
                 # Build messages from chat history + current query
+                summary_text = f"\n\n[Previous Conversation Summary]: {request.history_summary}" if request.history_summary else ""
+                
                 chat_messages = [
                     SystemMessage(content=(
                         "You are ThinkTab AI, a friendly and intelligent browser assistant. "
-                        "The user is making casual conversation. Respond warmly and naturally. "
-                        "Keep your reply concise (1-3 sentences max). "
-                        "Do not mention documents, sources, or retrieval."
+                        "The user is making casual conversation or asking about the chat history. "
+                        "Respond warmly and naturally based on the provided conversation context. "
+                        "Keep your reply concise. Do not mention documents, sources, or retrieval."
+                        f"{summary_text}"
                     ))
                 ]
 
