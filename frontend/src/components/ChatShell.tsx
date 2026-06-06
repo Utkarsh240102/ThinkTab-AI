@@ -210,8 +210,24 @@ export default function ChatShell() {
     setChatHistory(updatedHistory);
     setLastQuery(query.trim());
 
-    /* ── Scrape the active webpage context ── */
-    const scrapedContexts = await scrapeActiveTab();
+    /* ── Scrape and Wait for Embed in Parallel (BUG2-006 fix) ── */
+    // Previously: scrape ran first, THEN the embed-wait loop ran sequentially.
+    // Now: both run concurrently with Promise.all — wall-clock time is
+    // max(scrape, embed-wait) instead of scrape + embed-wait.
+    const waitForEmbed = async () => {
+      if (!embedReadyRef.current) {
+        console.log("⏳ Waiting for initial page embed to finish...");
+        for (let i = 0; i < 30; i++) {
+          await new Promise(r => setTimeout(r, 100));
+          if (embedReadyRef.current) break;
+        }
+      }
+    };
+
+    const [scrapedContexts] = await Promise.all([
+      scrapeActiveTab(),
+      waitForEmbed(),
+    ]);
 
     /* ── Merge webpage + PDF contexts ── */
     // We MERGE both — not replace — so the RAG pipeline can search
@@ -219,18 +235,6 @@ export default function ChatShell() {
     const allContexts = [...scrapedContexts];
     if (pdfContext) {
       allContexts.push(pdfContext);
-    }
-
-    /* ── Await Pre-Embed Completion (Anti-Race Condition) ── */
-    // If the user types instantly upon opening the extension, the background
-    // pre-embed task might still be running. If we send the query now, the
-    // FAISS index will be empty. Wait up to 3 seconds for it to finish.
-    if (!embedReadyRef.current) {
-      console.log("⏳ Waiting for initial page embed to finish...");
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 100));
-        if (embedReadyRef.current) break;
-      }
     }
 
     /* Fire the backend call with all available contexts */
