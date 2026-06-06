@@ -54,9 +54,24 @@ def contextualize_query(state: GraphState) -> GraphState:
 
     print(f"[Contextualizer] Resolving references in: '{query}'")
 
+    summary_text = (
+        f"\n\n[Previous Conversation Summary]: "
+        f"{state['history_summary']}\n\n"
+        if state.get("history_summary")
+        else ""
+    )
+
+    system_prompt = (
+        "Given a chat history and the latest user question "
+        "which might reference context in the chat history, formulate a standalone question "
+        "which can be understood without the chat history. Do NOT answer the question, "
+        "just reformulate it if needed and otherwise return it as is."
+        f"{summary_text}"
+    )
+
     # ── Call gpt-4o-mini to rewrite the query ──
     messages = [
-        SystemMessage(content=CONTEXTUALIZER_SYSTEM_PROMPT),
+        SystemMessage(content=system_prompt),
         HumanMessage(content=f"""Conversation history:
 {history_text}
 
