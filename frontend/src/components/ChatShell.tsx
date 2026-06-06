@@ -43,6 +43,7 @@ export default function ChatShell() {
   const [messages,     setMessages]     = useState<Message[]>([]);
   const [selectedMode, setSelectedMode] = useState<Mode>("auto");
   const [chatHistory,  setChatHistory]  = useState<ChatHistoryItem[]>([]);
+  const [historySummary, setHistorySummary] = useState("");
   const [lastQuery,    setLastQuery]    = useState("");
   const bottomRef  = useRef<HTMLDivElement>(null);
   // Hidden file input ref — we programmatically click it when the 📎 button is pressed
@@ -93,6 +94,38 @@ export default function ChatShell() {
     };
     setMessages((prev) => [...prev, errMsg]);
   }, [error]);
+
+  useEffect(() => {
+    if (chatHistory.length > 10) {
+      const messagesToDrop = chatHistory.slice(
+        0,
+        chatHistory.length - 10
+      );
+
+      fetch(`${BACKEND_URL}/api/summarize-history`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          old_messages: messagesToDrop,
+          current_summary: historySummary || null
+        })
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.summary) {
+            setHistorySummary(data.summary);
+          }
+        })
+        .catch((err) =>
+          console.warn(
+            "Background summarization failed:",
+            err
+          )
+        );
+    }
+  }, [chatHistory]);
 
   /* Auto-scroll to bottom on new messages or status */
   useEffect(() => {
@@ -238,7 +271,7 @@ export default function ChatShell() {
     }
 
     /* Fire the backend call with all available contexts */
-    sendQuery(query.trim(), selectedMode, allContexts, updatedHistory);
+    sendQuery(query.trim(), selectedMode, allContexts, updatedHistory, historySummary);
 
     setQuery("");
   }
