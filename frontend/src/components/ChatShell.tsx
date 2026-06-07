@@ -8,7 +8,7 @@ import SoftHITLButton from "./SoftHITLButton";
 import EvidenceAccordion from "./EvidenceAccordion";
 import ErrorBubble from "./ErrorBubble";
 import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
-import ReactMarkdown from "react-markdown";
+import TypewriterMarkdown from "./TypewriterMarkdown";
 import { usePDFParser } from "../hooks/usePDFParser";
 
 // ── Message types ──────────────────────────────────────────────
@@ -26,6 +26,7 @@ interface AssistantMessage {
   evidence:         EvidenceItem[];
   confidence_score: number;
   mode:             string;
+  isTyping?:        boolean;
 }
 
 interface ErrorMessage {
@@ -70,6 +71,7 @@ export default function ChatShell() {
       evidence:         finalAnswer.evidence,
       confidence_score: finalAnswer.confidence_score,
       mode:             displayMode ?? "",
+      isTyping:         true,
     };
 
     setMessages((prev) => [...prev, assistantMsg]);
@@ -301,6 +303,16 @@ export default function ChatShell() {
     setLastQuery("");
   }
 
+  function handleTypingDone(messageId: string) {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.role === "assistant" && msg.id === messageId
+          ? { ...msg, isTyping: false }
+          : msg
+      )
+    );
+  }
+
   /* ── Confidence badge color ── */
   function confidenceColor(score: number): string {
     if (score >= 0.8) return "var(--status-success)";
@@ -376,11 +388,15 @@ export default function ChatShell() {
                         border: "1px solid var(--glass-border)",
                         color: "var(--text-primary)",
                       }}>
-                        <ReactMarkdown>{msg.answer}</ReactMarkdown>
+                        <TypewriterMarkdown
+                          text={msg.answer}
+                          enabled={Boolean(msg.isTyping)}
+                          onDone={() => handleTypingDone(msg.id)}
+                        />
                       </div>
 
                       {/* Evidence Accordion + Confidence badge */}
-                      {(msg.evidence.length > 0 || msg.confidence_score > 0) && (
+                      {!msg.isTyping && (msg.evidence.length > 0 || msg.confidence_score > 0) && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingLeft: "4px" }}>
                           
                           {/* Confidence badge */}
@@ -406,7 +422,7 @@ export default function ChatShell() {
                         </div>
                       )}
                       {/* ── SOFT HITL: Switch to Deep Mode ── */}
-                      {msg.role === "assistant" && isFinalMessage && msg.mode.includes("Fast") && (
+                      {!msg.isTyping && msg.role === "assistant" && isFinalMessage && msg.mode.includes("Fast") && (
                         <div style={{ marginTop: "4px" }}>
                           <SoftHITLButton 
                             onClick={handleSwitchToDeep} 
