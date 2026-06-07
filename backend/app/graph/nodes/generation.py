@@ -18,7 +18,7 @@ class EvidenceItem(BaseModel):
 
 class FinalOutput(BaseModel):
     reasoning_summary: str = Field(description="A short plain-English explanation of how the answer was derived")
-    answer: str = Field(description="The markdown-formatted final answer. Do NOT include source citations in this text. If the answer is not found, this MUST be exactly 'I cannot find the answer on this page.'")
+    answer: str = Field(description="The markdown-formatted final answer. Do NOT include source citations in this text. If the context contains absolutely NO useful facts to synthesize an answer, this MUST be exactly 'I cannot find the answer on this page.'")
     evidence: List[EvidenceItem] = Field(description="List of evidence items used to formulate the answer")
     confidence_score: float = Field(description="A score between 0.0 and 1.0 indicating confidence in the answer")
 
@@ -30,11 +30,12 @@ GENERATOR_SYSTEM_PROMPT = """You are an expert AI assistant answering questions 
 
 RULES:
 1. Answer using ONLY the information in the provided context. Do NOT use outside knowledge.
-2. If context does not contain the answer, return EXACTLY: "I cannot find the answer on this page."
+2. If the context contains absolutely NO useful facts to answer or synthesize an answer, return EXACTLY: "I cannot find the answer on this page."
 3. Write clean, complete, natural sentences. (e.g. "The capital of France is Paris." NOT just "Paris").
 4. NO inline citations or source brackets in the answer text. Citations belong ONLY in the structured evidence list.
 5. Extract exact short snippets for the evidence list.
-6. Provide a confidence score (0.0 to 1.0) and a short reasoning summary."""
+6. Provide a confidence score (0.0 to 1.0) and a short reasoning summary.
+7. SYNTHESIS: If the user asks you to compare, contrast, or analyze multiple subjects, you MUST synthesize an answer using the provided facts about those subjects. Do not refuse to answer just because the explicit comparison is not written in the text; you have permission to draw comparisons yourself using ONLY the provided facts."""
 
 # Alias for backwards compatibility with fast_mode.py
 FAST_GENERATOR_SYSTEM_PROMPT = GENERATOR_SYSTEM_PROMPT
