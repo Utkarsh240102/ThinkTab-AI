@@ -169,6 +169,22 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         # Retrieve top K candidates dynamically based on mode
         raw_docs = faiss_index.similarity_search(
             query,
+        # ── End source-intent gate ────────────────────────────────────────────
+
+        # Guard: skip empty or whitespace-only content — FAISS.from_documents
+        # crashes with IndexError when there are no chunks to embed
+        if not content or not content.strip():
+            print(f"[Retrieval] WARNING: Skipping empty content for source '{source_id}'")
+            continue
+
+        print(f"[Retrieval] Searching FAISS for source: {source_id}")
+
+        # get_or_embed: returns cached FAISS index or embeds fresh
+        faiss_index = embedding_cache.get_or_embed(content, source_id)
+
+        # Retrieve top K candidates dynamically based on mode
+        raw_docs = faiss_index.similarity_search(
+            query,
             k=retrieve_k
         )
 
@@ -181,23 +197,41 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         return {**state, "docs": []}
 
     # Step 2: Re-rank all collected chunks
-    print(f"[Retrieval] Re-ranking {len(all_docs)} total chunks...")
+    SUMMARY_KEYWORDS = ["summarize", "summary", "overview", "brief", "compare", "explain", "tell me about"]
+    is_summary = any(kw in query.lower() for kw in SUMMARY_KEYWORDS)
 
-    # Build (query, chunk_text) pairs for the Cross-Encoder
-    pairs = [(query, doc.page_content) for doc in all_docs]
-
-    # Score each pair — higher score = more relevant
-    scores = reranker.predict(pairs)
-
-    # Zip scores with docs and sort by score descending
-    scored_docs = sorted(
-        zip(scores, all_docs),
-        key=lambda x: x[0],
-        reverse=True
-    )
-
-    # Keep only the top N after re-ranking dynamically based on mode
-    top_docs = [doc for _, doc in scored_docs[:rerank_top_k]]
+    if is_summary:
+        print("[Retrieval] Summary intent detected. Bypassing CrossEncoder and interleaving sources.")
+        docs_by_source = {}
+        for doc in all_docs:
+            src = doc.metadata.get("source", "unknown")
+            if src not in docs_by_source:
+                docs_by_source[src] = []
+            docs_by_source[src].append(doc)
+            
+        top_docs = []
+        while len(top_docs) < rerank_top_k and docs_by_source:
+            for src in list(docs_by_source.keys()):
+                if docs_by_source[src]:
+                    top_docs.append(docs_by_source[src].pop(0))
+                else:
+                    del docs_by_source[src]
+                if len(top_docs) >= rerank_top_k:
+                    break
+    else:
+        print(f"[Retrieval] Re-ranking {len(all_docs)} total chunks...")
+        
+        # Build (query, chunk_text) pairs for the Cross-Encoder
+        pairs = [(query, doc.page_content) for doc in all_docs]
+        
+        # Score each pair — higher score = more relevant
+        scores = reranker.predict(pairs)
+        
+        # Zip scores with docs and sort by score descending
+        scored_docs = sorted(zip(scores, all_docs), key=lambda x: x[0], reverse=True)
+        
+        # Keep only the top N after re-ranking dynamically based on mode
+        top_docs = [doc for _, doc in scored_docs[:rerank_top_k]]
 
     print(f"[Retrieval] Kept top {len(top_docs)} chunks after re-ranking.")
     for i, doc in enumerate(top_docs):
