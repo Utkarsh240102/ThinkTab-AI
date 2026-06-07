@@ -30,7 +30,7 @@ GENERATOR_SYSTEM_PROMPT = """You are an expert AI assistant answering questions 
 
 RULES:
 1. Answer using ONLY the information in the provided context. Do NOT use outside knowledge.
-2. If the context contains absolutely NO useful facts to answer or synthesize an answer, return EXACTLY: "I cannot find the answer on this page."
+2. If you are able to synthesize an answer or provide relevant facts, DO NOT use the phrase "I cannot find the answer on this page." Use that exact phrase ONLY if you are completely unable to provide any helpful information.
 3. Write clean, complete, natural sentences. (e.g. "The capital of France is Paris." NOT just "Paris").
 4. NO inline citations or source brackets in the answer text. Citations belong ONLY in the structured evidence list.
 5. Extract exact short snippets for the evidence list.
