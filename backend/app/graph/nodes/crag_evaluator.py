@@ -73,6 +73,7 @@ def eval_docs(state: GraphState) -> GraphState:
         "overview", "briefly explain", "brief overview",
         "what does this page say", "what is this about",
         "give me a brief", "tldr", "tl;dr",
+        "explain", "compare", "tell me about",
     ]
     query_lower = query.lower()
     if any(kw in query_lower for kw in SUMMARY_KEYWORDS):
