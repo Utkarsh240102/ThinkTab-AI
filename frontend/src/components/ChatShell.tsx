@@ -7,7 +7,7 @@ import StatusBubble from "./StatusBubble";
 import SoftHITLButton from "./SoftHITLButton";
 import EvidenceAccordion from "./EvidenceAccordion";
 import ErrorBubble from "./ErrorBubble";
-import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
+import { useSSEChat, type EvidenceItem, type ChatHistoryItem, type Context } from "../hooks/useSSEChat";
 import TypewriterMarkdown from "./TypewriterMarkdown";
 import { usePDFParser } from "../hooks/usePDFParser";
 
@@ -46,6 +46,7 @@ export default function ChatShell() {
   const [chatHistory,  setChatHistory]  = useState<ChatHistoryItem[]>([]);
   const [historySummary, setHistorySummary] = useState("");
   const [lastQuery,    setLastQuery]    = useState("");
+  const [pinnedContexts, setPinnedContexts] = useState<Context[]>([]);
   const bottomRef  = useRef<HTMLDivElement>(null);
   // Hidden file input ref — we programmatically click it when the 📎 button is pressed
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -137,8 +138,8 @@ export default function ChatShell() {
   const BACKEND_URL = "http://127.0.0.1:8000";
 
   /* ── Reusable Tab Scraper ── */
-  async function scrapeActiveTab(): Promise<any[]> {
-    let scrapedContexts: any[] = [];
+  async function scrapeActiveTab(): Promise<Context[]> {
+    let scrapedContexts: Context[] = [];
     if (typeof chrome === "undefined" || !chrome.tabs) return scrapedContexts;
 
     try {
@@ -151,7 +152,7 @@ export default function ChatShell() {
 
       // Helper: send a scrape message and resolve null on any error
       // (null means the content script is not present in this tab)
-      function sendScrapeMessage(id: number): Promise<any> {
+      function sendScrapeMessage(id: number): Promise<{ contexts?: string[] } | null> {
         return new Promise((resolve) => {
           chrome.tabs.sendMessage(id, { action: "SCRAPE_PAGE_CONTEXT" }, (response) => {
             if (chrome.runtime.lastError) {
@@ -268,6 +269,7 @@ export default function ChatShell() {
     // We MERGE both — not replace — so the RAG pipeline can search
     // across the webpage AND the PDF at the same time.
     const allContexts = [...scrapedContexts];
+    allContexts.push(...pinnedContexts);
     if (pdfContext) {
       allContexts.push(pdfContext);
     }
@@ -320,6 +322,30 @@ export default function ChatShell() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  async function handlePinTab() {
+    const scrapedContexts = await scrapeActiveTab();
+    if (scrapedContexts.length === 0) return;
+
+    let sourceId = scrapedContexts[0]?.source_id || "Pinned Tab";
+    if (typeof chrome !== "undefined" && chrome.tabs) {
+      const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve);
+      });
+      sourceId = activeTab?.url || activeTab?.title || sourceId;
+    }
+
+    setPinnedContexts((prev) => {
+      if (prev.some((ctx) => ctx.source_id === sourceId)) return prev;
+      return [
+        ...prev,
+        ...scrapedContexts.map((ctx) => ({
+          ...ctx,
+          source_id: sourceId,
+        })),
+      ];
+    });
   }
 
   function handleTypingDone(messageId: string) {
@@ -557,6 +583,28 @@ export default function ChatShell() {
               }}
             >
               Export
+            </button>
+
+            <button
+              onClick={handlePinTab}
+              disabled={isLoading}
+              title={`Pin current tab${pinnedContexts.length ? ` (${pinnedContexts.length} pinned)` : ""}`}
+              style={{
+                border: "1px solid var(--glass-border)",
+                borderRadius: "8px",
+                padding: "5px 10px",
+                background: "rgba(255,255,255,0.05)",
+                color: "var(--text-secondary)",
+                fontSize: "12px",
+                fontWeight: 500,
+                fontFamily: "inherit",
+                cursor: isLoading ? "not-allowed" : "pointer",
+                opacity: isLoading ? 0.45 : 1,
+                transition: "all 0.2s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Pin Current Tab 📌
             </button>
 
             {/* Spacer pushes attach button to the right */}
