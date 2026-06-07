@@ -556,6 +556,7 @@ export default function ChatShell() {
             padding:    "8px 16px 0",
             borderTop:  "1px solid var(--glass-border)",
             gap:        "8px",
+            flexWrap:   "wrap",
           }}>
             <ModeSelector
               selected={selectedMode}
@@ -626,7 +627,7 @@ export default function ChatShell() {
                 whiteSpace: "nowrap",
               }}
             >
-              Clear Pinned Tabs
+              Clear Pinned
             </button>
 
             {/* Spacer pushes attach button to the right */}
@@ -648,7 +649,7 @@ export default function ChatShell() {
                 display:      "flex",
                 alignItems:   "center",
                 justifyContent: "center",
-                color:        pdfContext ? "var(--text-accent)" : "var(--text-primary)",
+                color:        "var(--text-primary)",
                 transition:   "all 0.2s ease",
                 opacity:      isPDFLoading ? 0.6 : 1,
                 boxShadow:    pdfContext ? "0 0 14px rgba(99,102,241,0.28)" : "0 0 10px rgba(165,180,252,0.12)",
@@ -658,7 +659,7 @@ export default function ChatShell() {
                   ? "rgba(99,102,241,0.3)"
                   : "rgba(165,180,252,0.16)";
                 (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(165,180,252,0.65)";
-                (e.currentTarget as HTMLButtonElement).style.color = "var(--text-accent)";
+                (e.currentTarget as HTMLButtonElement).style.color = "white";
                 (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 0 16px rgba(165,180,252,0.3)";
               }}
               onMouseLeave={(e) => {
@@ -668,9 +669,7 @@ export default function ChatShell() {
                 (e.currentTarget as HTMLButtonElement).style.borderColor = pdfContext
                   ? "rgba(99,102,241,0.55)"
                   : "rgba(165,180,252,0.38)";
-                (e.currentTarget as HTMLButtonElement).style.color = pdfContext
-                  ? "var(--text-accent)"
-                  : "var(--text-primary)";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
                 (e.currentTarget as HTMLButtonElement).style.boxShadow = pdfContext
                   ? "0 0 14px rgba(99,102,241,0.28)"
                   : "0 0 10px rgba(165,180,252,0.12)";
@@ -685,8 +684,8 @@ export default function ChatShell() {
                 </svg>
               ) : (
                 // Paperclip icon
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </svg>
               )}
