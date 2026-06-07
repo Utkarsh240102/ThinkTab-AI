@@ -303,6 +303,25 @@ export default function ChatShell() {
     setLastQuery("");
   }
 
+  function handleExportChat() {
+    const markdownText = chatHistory.length > 0
+      ? chatHistory.map((msg) => {
+          const heading = msg.role === "user" ? "### 🧑 User" : "### 🤖 ThinkTab";
+          return `${heading}\n\n${msg.content}\n`;
+        }).join("\n")
+      : "# ThinkTab Chat\n\n_No messages to export yet._\n";
+
+    const blob = new Blob([markdownText], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "ThinkTab-Chat.md";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function handleTypingDone(messageId: string) {
     setMessages((prev) =>
       prev.map((msg) =>
@@ -517,6 +536,28 @@ export default function ChatShell() {
               onChange={setSelectedMode}
               disabled={isLoading}
             />
+
+            <button
+              onClick={handleExportChat}
+              disabled={chatHistory.length === 0}
+              title="Export chat as Markdown"
+              style={{
+                border: "1px solid var(--glass-border)",
+                borderRadius: "8px",
+                padding: "5px 10px",
+                background: "rgba(255,255,255,0.05)",
+                color: "var(--text-secondary)",
+                fontSize: "12px",
+                fontWeight: 500,
+                fontFamily: "inherit",
+                cursor: chatHistory.length === 0 ? "not-allowed" : "pointer",
+                opacity: chatHistory.length === 0 ? 0.45 : 1,
+                transition: "all 0.2s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Export
+            </button>
 
             {/* Spacer pushes attach button to the right */}
             <div style={{ flex: 1 }} />
