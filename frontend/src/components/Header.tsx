@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+
 interface HeaderProps {
   activeMode?: string;
   onClearChat?: () => void;
@@ -14,6 +16,24 @@ function handleReload() {
 }
 
 export default function Header({ activeMode, onClearChat }: HeaderProps) {
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    async function pingBackend() {
+      try {
+        const response = await fetch("http://127.0.0.1:8000/api/health");
+        setIsOnline(response.ok);
+      } catch {
+        setIsOnline(false);
+      }
+    }
+
+    pingBackend();
+    const intervalId = setInterval(pingBackend, 10000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   return (
     <header
       style={{
@@ -44,10 +64,18 @@ export default function Header({ activeMode, onClearChat }: HeaderProps) {
 
       {/* Title + mode */}
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <h1 className="gradient-text"
-          style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
-          ThinkTab AI
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <h1 className="gradient-text"
+            style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
+            ThinkTab AI
+          </h1>
+          <div style={{
+            width: "8px", height: "8px", borderRadius: "50%",
+            background: isOnline ? "var(--status-success)" : "var(--status-error)",
+            boxShadow: `0 0 6px ${isOnline ? "var(--status-success)" : "var(--status-error)"}`,
+            flexShrink: 0,
+          }} title={isOnline ? "Backend Online" : "Backend Offline"} />
+        </div>
         {activeMode ? (
           <span className="animate-fade-in-up"
             style={{ fontSize: "11px", color: "var(--text-accent)", marginTop: "2px", fontWeight: 500 }}>
@@ -60,7 +88,7 @@ export default function Header({ activeMode, onClearChat }: HeaderProps) {
         )}
       </div>
 
-      {/* Right side: Clear Chat + Reload button + Live dot */}
+      {/* Right side: Clear Chat + Reload button */}
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
 
         {/* Clear Chat Button */}
@@ -134,12 +162,6 @@ export default function Header({ activeMode, onClearChat }: HeaderProps) {
           </svg>
         </button>
 
-        {/* Live dot */}
-        <div style={{
-          width: "8px", height: "8px", borderRadius: "50%",
-          background: "var(--status-success)",
-          boxShadow: "0 0 6px var(--status-success)",
-        }} title="Backend connected" />
       </div>
     </header>
   );
