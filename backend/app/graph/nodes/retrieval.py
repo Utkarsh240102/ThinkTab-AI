@@ -49,57 +49,6 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
     if actual_mode == "deep":
         retrieve_k = settings.DEEP_MODE_RETRIEVE_K
         rerank_top_k = settings.DEEP_MODE_RERANK_TOP_K
-import os
-from sentence_transformers import CrossEncoder
-from langchain_core.documents import Document
-from app.services.vector_store import embedding_cache
-from app.graph.state import GraphState
-from app.core.config import settings
-
-# ─────────────────────────────────────────────────────────────
-# Cross-Encoder Re-ranker
-# Saved locally to D:\PROJECTS\ThinkTab-AI\models\ instead of
-# the global HuggingFace cache (~/.cache/huggingface)
-# ─────────────────────────────────────────────────────────────
-MODEL_CACHE_DIR = os.path.join(
-    os.path.dirname(__file__),   # backend/app/graph/nodes/
-    "../../../../models"          # → D:/PROJECTS/ThinkTab-AI/models/
-)
-
-print("[Retrieval] Loading Cross-Encoder re-ranker model...")
-reranker = CrossEncoder(
-    "BAAI/bge-reranker-base",
-    max_length=512,
-    cache_folder=os.path.abspath(MODEL_CACHE_DIR)
-)
-print("[Retrieval] Re-ranker ready.")
-
-
-def retrieve_and_rerank(state: GraphState) -> GraphState:
-    """
-    LangGraph Node: Retrieval + Re-ranking
-
-    Two-stage retrieval:
-    1. FAISS similarity search -> fetches top K chunks (fast, approximate)
-    2. Cross-Encoder re-ranking -> scores and re-orders, keeps top N (slow, precise)
-
-    The FAISS index is sourced from the LRU embedding cache. If the page
-    was pre-embedded, this is near-instant. If not, it embeds on-the-fly.
-
-    Updates GraphState with:
-        docs -> List of top re-ranked Document chunks
-    """
-
-    query = state["query"]
-    contexts = state["contexts"]
-    
-    # Determine which mode we are actually running in ("fast" or "deep")
-    # If mode is "auto", the auto_router will have populated "selected_mode"
-    actual_mode = state.get("selected_mode") or state.get("mode")
-    
-    if actual_mode == "deep":
-        retrieve_k = settings.DEEP_MODE_RETRIEVE_K
-        rerank_top_k = settings.DEEP_MODE_RERANK_TOP_K
     else:
         retrieve_k = settings.FAST_MODE_RETRIEVE_K
         rerank_top_k = settings.FAST_MODE_RERANK_TOP_K
@@ -166,23 +115,6 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         # get_or_embed: returns cached FAISS index or embeds fresh
         faiss_index = embedding_cache.get_or_embed(content, source_id)
 
-        # Retrieve top K candidates dynamically based on mode
-        raw_docs = faiss_index.similarity_search(
-            query,
-        # ── End source-intent gate ────────────────────────────────────────────
-
-        # Guard: skip empty or whitespace-only content — FAISS.from_documents
-        # crashes with IndexError when there are no chunks to embed
-        if not content or not content.strip():
-            print(f"[Retrieval] WARNING: Skipping empty content for source '{source_id}'")
-            continue
-
-        print(f"[Retrieval] Searching FAISS for source: {source_id}")
-
-        # get_or_embed: returns cached FAISS index or embeds fresh
-        faiss_index = embedding_cache.get_or_embed(content, source_id)
-
-        # Retrieve top K candidates dynamically based on mode
         raw_docs = faiss_index.similarity_search(
             query,
             k=retrieve_k
