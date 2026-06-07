@@ -49,6 +49,57 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
     if actual_mode == "deep":
         retrieve_k = settings.DEEP_MODE_RETRIEVE_K
         rerank_top_k = settings.DEEP_MODE_RERANK_TOP_K
+import os
+from sentence_transformers import CrossEncoder
+from langchain_core.documents import Document
+from app.services.vector_store import embedding_cache
+from app.graph.state import GraphState
+from app.core.config import settings
+
+# ─────────────────────────────────────────────────────────────
+# Cross-Encoder Re-ranker
+# Saved locally to D:\PROJECTS\ThinkTab-AI\models\ instead of
+# the global HuggingFace cache (~/.cache/huggingface)
+# ─────────────────────────────────────────────────────────────
+MODEL_CACHE_DIR = os.path.join(
+    os.path.dirname(__file__),   # backend/app/graph/nodes/
+    "../../../../models"          # → D:/PROJECTS/ThinkTab-AI/models/
+)
+
+print("[Retrieval] Loading Cross-Encoder re-ranker model...")
+reranker = CrossEncoder(
+    "BAAI/bge-reranker-base",
+    max_length=512,
+    cache_folder=os.path.abspath(MODEL_CACHE_DIR)
+)
+print("[Retrieval] Re-ranker ready.")
+
+
+def retrieve_and_rerank(state: GraphState) -> GraphState:
+    """
+    LangGraph Node: Retrieval + Re-ranking
+
+    Two-stage retrieval:
+    1. FAISS similarity search -> fetches top K chunks (fast, approximate)
+    2. Cross-Encoder re-ranking -> scores and re-orders, keeps top N (slow, precise)
+
+    The FAISS index is sourced from the LRU embedding cache. If the page
+    was pre-embedded, this is near-instant. If not, it embeds on-the-fly.
+
+    Updates GraphState with:
+        docs -> List of top re-ranked Document chunks
+    """
+
+    query = state["query"]
+    contexts = state["contexts"]
+    
+    # Determine which mode we are actually running in ("fast" or "deep")
+    # If mode is "auto", the auto_router will have populated "selected_mode"
+    actual_mode = state.get("selected_mode") or state.get("mode")
+    
+    if actual_mode == "deep":
+        retrieve_k = settings.DEEP_MODE_RETRIEVE_K
+        rerank_top_k = settings.DEEP_MODE_RERANK_TOP_K
     else:
         retrieve_k = settings.FAST_MODE_RETRIEVE_K
         rerank_top_k = settings.FAST_MODE_RERANK_TOP_K
@@ -58,25 +109,23 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
     # ── BUG2-003 FIX: Source-intent filtering ────────────────────────────────
     # When a user explicitly names a source ("summarize the web page", "read
     # the PDF"), restricting retrieval to only that source prevents the
-    # re-ranker from pulling chunks from the wrong place (e.g. PDF chunks
-    # winning over Active Tab chunks when the user asked about the web page).
-    #
-    # Detection uses simple substring matching on the lowercased query.
-    # web_signals → only search contexts where source_id == "Active Tab"
-    # pdf_signals → only search contexts where source_id != "Active Tab"
-    # no signal   → search all contexts (unchanged default behaviour)
-    _WEB_SIGNALS = [
-        "web page", "webpage", "this page", "the tab", "active tab",
-        "the website", "website", "the page", "current tab", "current window", "window",
-    ]
-    _PDF_SIGNALS = [
-        "pdf", "document", "the file", "the resume",
-        "the attachment", "uploaded file", "attached file", "the pdf",
-    ]
+    # re-ranker from pulling chunks from the wrong place.
+    
+    _BOTH_SIGNALS = ["both webpages", "both pages", "all pages", "all tabs"]
+    _ACTIVE_SIGNALS = ["this page", "current page", "active tab", "current tab", "this webpage", "current webpage", "the website"]
+    _PINNED_SIGNALS = ["pinned", "pinned tab", "pinned page", "other tab", "background tab"]
+    _PDF_SIGNALS = ["pdf", "document", "the file", "the resume", "uploaded file", "attached file"]
+
     _query_lower = query.lower()
-    if any(kw in _query_lower for kw in _WEB_SIGNALS):
-        source_filter = "web"
-        print("[Retrieval] Source intent: WEB PAGE only")
+    if any(kw in _query_lower for kw in _BOTH_SIGNALS):
+        source_filter = None
+        print("[Retrieval] Source intent: BOTH active and pinned sources")
+    elif any(kw in _query_lower for kw in _ACTIVE_SIGNALS):
+        source_filter = "active"
+        print("[Retrieval] Source intent: ACTIVE TAB only")
+    elif any(kw in _query_lower for kw in _PINNED_SIGNALS):
+        source_filter = "pinned"
+        print("[Retrieval] Source intent: PINNED TAB only")
     elif any(kw in _query_lower for kw in _PDF_SIGNALS):
         source_filter = "pdf"
         print("[Retrieval] Source intent: PDF only")
@@ -93,8 +142,13 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         # ── Source-intent gate ────────────────────────────────────────────────
         # Skip this context if it doesn't match the source the user asked about.
         is_pdf = source_id.lower().endswith('.pdf')
-        if source_filter == "web" and is_pdf:
-            print(f"[Retrieval] Skipping '{source_id}' (web-only intent)")
+        is_active = (source_id == "Active Tab")
+
+        if source_filter == "active" and not is_active:
+            print(f"[Retrieval] Skipping '{source_id}' (active-only intent)")
+            continue
+        if source_filter == "pinned" and (is_active or is_pdf):
+            print(f"[Retrieval] Skipping '{source_id}' (pinned-only intent)")
             continue
         if source_filter == "pdf" and not is_pdf:
             print(f"[Retrieval] Skipping '{source_id}' (pdf-only intent)")
