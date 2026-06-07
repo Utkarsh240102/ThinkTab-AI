@@ -92,11 +92,11 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
 
         # ── Source-intent gate ────────────────────────────────────────────────
         # Skip this context if it doesn't match the source the user asked about.
-        # "Active Tab" is the canonical source_id set by content.js / ChatShell.
-        if source_filter == "web" and source_id != "Active Tab":
+        is_pdf = source_id.lower().endswith('.pdf')
+        if source_filter == "web" and is_pdf:
             print(f"[Retrieval] Skipping '{source_id}' (web-only intent)")
             continue
-        if source_filter == "pdf" and source_id == "Active Tab":
+        if source_filter == "pdf" and not is_pdf:
             print(f"[Retrieval] Skipping '{source_id}' (pdf-only intent)")
             continue
         # ── End source-intent gate ────────────────────────────────────────────
