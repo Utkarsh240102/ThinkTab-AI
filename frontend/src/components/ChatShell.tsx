@@ -333,7 +333,7 @@ export default function ChatShell() {
       const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
         chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve);
       });
-      sourceId = activeTab?.url || activeTab?.title || sourceId;
+      sourceId = `Pinned Tab: ${activeTab?.title || activeTab?.url || "Unknown"}`;
     }
 
     setPinnedContexts((prev) => {
