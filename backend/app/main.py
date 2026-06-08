@@ -15,16 +15,18 @@ app = FastAPI(title="ThinkTab AI Backend")
 # Allow the Chrome Extension to talk to this server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, this would be restricted to chrome-extension:// IDs
+    # In production, this would be restricted to chrome-extension:// IDs
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 async def health_check():
     return {
-        "status": "ok", 
+        "status": "ok",
         "active_models": {
             "routing": settings.OPENROUTER_MODEL,
             "generation": settings.GROQ_MODEL,
