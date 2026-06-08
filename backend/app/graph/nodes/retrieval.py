@@ -58,25 +58,23 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
     # ── BUG2-003 FIX: Source-intent filtering ────────────────────────────────
     # When a user explicitly names a source ("summarize the web page", "read
     # the PDF"), restricting retrieval to only that source prevents the
-    # re-ranker from pulling chunks from the wrong place (e.g. PDF chunks
-    # winning over Active Tab chunks when the user asked about the web page).
-    #
-    # Detection uses simple substring matching on the lowercased query.
-    # web_signals → only search contexts where source_id == "Active Tab"
-    # pdf_signals → only search contexts where source_id != "Active Tab"
-    # no signal   → search all contexts (unchanged default behaviour)
-    _WEB_SIGNALS = [
-        "web page", "webpage", "this page", "the tab", "active tab",
-        "the website", "website", "the page", "current tab", "current window", "window",
-    ]
-    _PDF_SIGNALS = [
-        "pdf", "document", "the file", "the resume",
-        "the attachment", "uploaded file", "attached file", "the pdf",
-    ]
+    # re-ranker from pulling chunks from the wrong place.
+    
+    _BOTH_SIGNALS = ["both webpages", "both pages", "all pages", "all tabs"]
+    _ACTIVE_SIGNALS = ["this page", "current page", "active tab", "current tab", "this webpage", "current webpage", "the website"]
+    _PINNED_SIGNALS = ["pinned", "pinned tab", "pinned page", "other tab", "background tab"]
+    _PDF_SIGNALS = ["pdf", "document", "the file", "the resume", "uploaded file", "attached file"]
+
     _query_lower = query.lower()
-    if any(kw in _query_lower for kw in _WEB_SIGNALS):
-        source_filter = "web"
-        print("[Retrieval] Source intent: WEB PAGE only")
+    if any(kw in _query_lower for kw in _BOTH_SIGNALS):
+        source_filter = None
+        print("[Retrieval] Source intent: BOTH active and pinned sources")
+    elif any(kw in _query_lower for kw in _ACTIVE_SIGNALS):
+        source_filter = "active"
+        print("[Retrieval] Source intent: ACTIVE TAB only")
+    elif any(kw in _query_lower for kw in _PINNED_SIGNALS):
+        source_filter = "pinned"
+        print("[Retrieval] Source intent: PINNED TAB only")
     elif any(kw in _query_lower for kw in _PDF_SIGNALS):
         source_filter = "pdf"
         print("[Retrieval] Source intent: PDF only")
@@ -92,11 +90,16 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
 
         # ── Source-intent gate ────────────────────────────────────────────────
         # Skip this context if it doesn't match the source the user asked about.
-        # "Active Tab" is the canonical source_id set by content.js / ChatShell.
-        if source_filter == "web" and source_id != "Active Tab":
-            print(f"[Retrieval] Skipping '{source_id}' (web-only intent)")
+        is_pdf = source_id.lower().endswith('.pdf')
+        is_active = (source_id == "Active Tab")
+
+        if source_filter == "active" and not is_active:
+            print(f"[Retrieval] Skipping '{source_id}' (active-only intent)")
             continue
-        if source_filter == "pdf" and source_id == "Active Tab":
+        if source_filter == "pinned" and (is_active or is_pdf):
+            print(f"[Retrieval] Skipping '{source_id}' (pinned-only intent)")
+            continue
+        if source_filter == "pdf" and not is_pdf:
             print(f"[Retrieval] Skipping '{source_id}' (pdf-only intent)")
             continue
         # ── End source-intent gate ────────────────────────────────────────────
@@ -112,7 +115,6 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         # get_or_embed: returns cached FAISS index or embeds fresh
         faiss_index = embedding_cache.get_or_embed(content, source_id)
 
-        # Retrieve top K candidates dynamically based on mode
         raw_docs = faiss_index.similarity_search(
             query,
             k=retrieve_k
@@ -127,23 +129,41 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         return {**state, "docs": []}
 
     # Step 2: Re-rank all collected chunks
-    print(f"[Retrieval] Re-ranking {len(all_docs)} total chunks...")
+    SUMMARY_KEYWORDS = ["summarize", "summary", "overview", "brief", "compare", "explain", "tell me about"]
+    is_summary = any(kw in query.lower() for kw in SUMMARY_KEYWORDS)
 
-    # Build (query, chunk_text) pairs for the Cross-Encoder
-    pairs = [(query, doc.page_content) for doc in all_docs]
-
-    # Score each pair — higher score = more relevant
-    scores = reranker.predict(pairs)
-
-    # Zip scores with docs and sort by score descending
-    scored_docs = sorted(
-        zip(scores, all_docs),
-        key=lambda x: x[0],
-        reverse=True
-    )
-
-    # Keep only the top N after re-ranking dynamically based on mode
-    top_docs = [doc for _, doc in scored_docs[:rerank_top_k]]
+    if is_summary:
+        print("[Retrieval] Summary intent detected. Bypassing CrossEncoder and interleaving sources.")
+        docs_by_source = {}
+        for doc in all_docs:
+            src = doc.metadata.get("source", "unknown")
+            if src not in docs_by_source:
+                docs_by_source[src] = []
+            docs_by_source[src].append(doc)
+            
+        top_docs = []
+        while len(top_docs) < rerank_top_k and docs_by_source:
+            for src in list(docs_by_source.keys()):
+                if docs_by_source[src]:
+                    top_docs.append(docs_by_source[src].pop(0))
+                else:
+                    del docs_by_source[src]
+                if len(top_docs) >= rerank_top_k:
+                    break
+    else:
+        print(f"[Retrieval] Re-ranking {len(all_docs)} total chunks...")
+        
+        # Build (query, chunk_text) pairs for the Cross-Encoder
+        pairs = [(query, doc.page_content) for doc in all_docs]
+        
+        # Score each pair — higher score = more relevant
+        scores = reranker.predict(pairs)
+        
+        # Zip scores with docs and sort by score descending
+        scored_docs = sorted(zip(scores, all_docs), key=lambda x: x[0], reverse=True)
+        
+        # Keep only the top N after re-ranking dynamically based on mode
+        top_docs = [doc for _, doc in scored_docs[:rerank_top_k]]
 
     print(f"[Retrieval] Kept top {len(top_docs)} chunks after re-ranking.")
     for i, doc in enumerate(top_docs):

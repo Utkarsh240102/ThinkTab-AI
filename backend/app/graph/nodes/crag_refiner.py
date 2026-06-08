@@ -13,6 +13,10 @@ REFINER_SYSTEM_PROMPT = """You are a precision editor. Your job is to extract ON
 You will be given a numbered list of sentences extracted from various sources.
 Return the indices of the sentences that contain relevant facts, claims, or context needed to answer the question.
 Drop ANY sentence that is filler, off-topic, boilerplate, or redundant.
+
+PARTIAL & MULTI-HOP QUERIES:
+If the user asks a comparative or multi-part question (e.g., comparing two subjects from different sources), any sentence that provides facts about AT LEAST ONE of those subjects MUST be kept. A sentence does NOT need to contain the full answer to be necessary; it only needs to provide one side of the comparison puzzle.
+
 Return the structured JSON array of indices to keep. If none are useful, return an empty list."""
 
 def crag_refiner(state: GraphState) -> GraphState:

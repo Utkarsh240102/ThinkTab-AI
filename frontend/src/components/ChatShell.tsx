@@ -7,8 +7,8 @@ import StatusBubble from "./StatusBubble";
 import SoftHITLButton from "./SoftHITLButton";
 import EvidenceAccordion from "./EvidenceAccordion";
 import ErrorBubble from "./ErrorBubble";
-import { useSSEChat, type EvidenceItem, type ChatHistoryItem } from "../hooks/useSSEChat";
-import ReactMarkdown from "react-markdown";
+import { useSSEChat, type EvidenceItem, type ChatHistoryItem, type Context } from "../hooks/useSSEChat";
+import TypewriterMarkdown from "./TypewriterMarkdown";
 import { usePDFParser } from "../hooks/usePDFParser";
 
 // ── Message types ──────────────────────────────────────────────
@@ -26,6 +26,7 @@ interface AssistantMessage {
   evidence:         EvidenceItem[];
   confidence_score: number;
   mode:             string;
+  isTyping?:        boolean;
 }
 
 interface ErrorMessage {
@@ -45,6 +46,7 @@ export default function ChatShell() {
   const [chatHistory,  setChatHistory]  = useState<ChatHistoryItem[]>([]);
   const [historySummary, setHistorySummary] = useState("");
   const [lastQuery,    setLastQuery]    = useState("");
+  const [pinnedContexts, setPinnedContexts] = useState<Context[]>([]);
   const bottomRef  = useRef<HTMLDivElement>(null);
   // Hidden file input ref — we programmatically click it when the 📎 button is pressed
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +72,7 @@ export default function ChatShell() {
       evidence:         finalAnswer.evidence,
       confidence_score: finalAnswer.confidence_score,
       mode:             displayMode ?? "",
+      isTyping:         true,
     };
 
     setMessages((prev) => [...prev, assistantMsg]);
@@ -135,8 +138,8 @@ export default function ChatShell() {
   const BACKEND_URL = "http://127.0.0.1:8000";
 
   /* ── Reusable Tab Scraper ── */
-  async function scrapeActiveTab(): Promise<any[]> {
-    let scrapedContexts: any[] = [];
+  async function scrapeActiveTab(): Promise<Context[]> {
+    let scrapedContexts: Context[] = [];
     if (typeof chrome === "undefined" || !chrome.tabs) return scrapedContexts;
 
     try {
@@ -149,7 +152,7 @@ export default function ChatShell() {
 
       // Helper: send a scrape message and resolve null on any error
       // (null means the content script is not present in this tab)
-      function sendScrapeMessage(id: number): Promise<any> {
+      function sendScrapeMessage(id: number): Promise<{ contexts?: string[] } | null> {
         return new Promise((resolve) => {
           chrome.tabs.sendMessage(id, { action: "SCRAPE_PAGE_CONTEXT" }, (response) => {
             if (chrome.runtime.lastError) {
@@ -266,6 +269,7 @@ export default function ChatShell() {
     // We MERGE both — not replace — so the RAG pipeline can search
     // across the webpage AND the PDF at the same time.
     const allContexts = [...scrapedContexts];
+    allContexts.push(...pinnedContexts);
     if (pdfContext) {
       allContexts.push(pdfContext);
     }
@@ -299,6 +303,59 @@ export default function ChatShell() {
     setMessages([]);
     setChatHistory([]);
     setLastQuery("");
+  }
+
+  function handleExportChat() {
+    const markdownText = chatHistory.length > 0
+      ? chatHistory.map((msg) => {
+          const heading = msg.role === "user" ? "### 🧑 User" : "### 🤖 ThinkTab";
+          return `${heading}\n\n${msg.content}\n`;
+        }).join("\n")
+      : "# ThinkTab Chat\n\n_No messages to export yet._\n";
+
+    const blob = new Blob([markdownText], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "ThinkTab-Chat.md";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handlePinTab() {
+    const scrapedContexts = await scrapeActiveTab();
+    if (scrapedContexts.length === 0) return;
+
+    let sourceId = scrapedContexts[0]?.source_id || "Pinned Tab";
+    if (typeof chrome !== "undefined" && chrome.tabs) {
+      const [activeTab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve);
+      });
+      sourceId = `Pinned Tab: ${activeTab?.title || activeTab?.url || "Unknown"}`;
+    }
+
+    setPinnedContexts((prev) => {
+      if (prev.some((ctx) => ctx.source_id === sourceId)) return prev;
+      return [
+        ...prev,
+        ...scrapedContexts.map((ctx) => ({
+          ...ctx,
+          source_id: sourceId,
+        })),
+      ];
+    });
+  }
+
+  function handleTypingDone(messageId: string) {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.role === "assistant" && msg.id === messageId
+          ? { ...msg, isTyping: false }
+          : msg
+      )
+    );
   }
 
   /* ── Confidence badge color ── */
@@ -376,11 +433,15 @@ export default function ChatShell() {
                         border: "1px solid var(--glass-border)",
                         color: "var(--text-primary)",
                       }}>
-                        <ReactMarkdown>{msg.answer}</ReactMarkdown>
+                        <TypewriterMarkdown
+                          text={msg.answer}
+                          enabled={Boolean(msg.isTyping)}
+                          onDone={() => handleTypingDone(msg.id)}
+                        />
                       </div>
 
                       {/* Evidence Accordion + Confidence badge */}
-                      {(msg.evidence.length > 0 || msg.confidence_score > 0) && (
+                      {!msg.isTyping && (msg.evidence.length > 0 || msg.confidence_score > 0) && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingLeft: "4px" }}>
                           
                           {/* Confidence badge */}
@@ -406,7 +467,7 @@ export default function ChatShell() {
                         </div>
                       )}
                       {/* ── SOFT HITL: Switch to Deep Mode ── */}
-                      {msg.role === "assistant" && isFinalMessage && msg.mode.includes("Fast") && (
+                      {!msg.isTyping && msg.role === "assistant" && isFinalMessage && msg.mode.includes("Fast") && (
                         <div style={{ marginTop: "4px" }}>
                           <SoftHITLButton 
                             onClick={handleSwitchToDeep} 
@@ -495,12 +556,79 @@ export default function ChatShell() {
             padding:    "8px 16px 0",
             borderTop:  "1px solid var(--glass-border)",
             gap:        "8px",
+            flexWrap:   "wrap",
           }}>
             <ModeSelector
               selected={selectedMode}
               onChange={setSelectedMode}
               disabled={isLoading}
             />
+
+            <button
+              onClick={handleExportChat}
+              disabled={chatHistory.length === 0}
+              title="Export chat as Markdown"
+              style={{
+                border: "1px solid var(--glass-border)",
+                borderRadius: "8px",
+                padding: "5px 10px",
+                background: "rgba(255,255,255,0.05)",
+                color: "var(--text-secondary)",
+                fontSize: "12px",
+                fontWeight: 500,
+                fontFamily: "inherit",
+                cursor: chatHistory.length === 0 ? "not-allowed" : "pointer",
+                opacity: chatHistory.length === 0 ? 0.45 : 1,
+                transition: "all 0.2s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Export
+            </button>
+
+            <button
+              onClick={handlePinTab}
+              disabled={isLoading}
+              title={`Pin current tab${pinnedContexts.length ? ` (${pinnedContexts.length} pinned)` : ""}`}
+              style={{
+                border: "1px solid var(--glass-border)",
+                borderRadius: "8px",
+                padding: "5px 10px",
+                background: "rgba(255,255,255,0.05)",
+                color: "var(--text-secondary)",
+                fontSize: "12px",
+                fontWeight: 500,
+                fontFamily: "inherit",
+                cursor: isLoading ? "not-allowed" : "pointer",
+                opacity: isLoading ? 0.45 : 1,
+                transition: "all 0.2s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {pinnedContexts.length > 0 ? `Pinned (${pinnedContexts.length})` : "Pin Current Tab 📌"}
+            </button>
+
+            <button
+              onClick={() => setPinnedContexts([])}
+              disabled={pinnedContexts.length === 0}
+              title="Clear pinned tabs"
+              style={{
+                border: "1px solid var(--glass-border)",
+                borderRadius: "8px",
+                padding: "5px 10px",
+                background: "rgba(255,255,255,0.05)",
+                color: "var(--text-secondary)",
+                fontSize: "12px",
+                fontWeight: 500,
+                fontFamily: "inherit",
+                cursor: pinnedContexts.length === 0 ? "not-allowed" : "pointer",
+                opacity: pinnedContexts.length === 0 ? 0.45 : 1,
+                transition: "all 0.2s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Clear Pinned
+            </button>
 
             {/* Spacer pushes attach button to the right */}
             <div style={{ flex: 1 }} />
@@ -511,42 +639,53 @@ export default function ChatShell() {
               disabled={isPDFLoading || isLoading}
               title={isPDFLoading ? (pdfStatusText || "Parsing...") : pdfContext ? `PDF attached: ${pdfContext.source_id}` : "Attach a PDF"}
               style={{
-                background:   pdfContext ? "rgba(99,102,241,0.15)" : "transparent",
-                border:       pdfContext ? "1px solid rgba(99,102,241,0.4)" : "1px solid var(--glass-border)",
-                borderRadius: "6px",
-                padding:      "4px 6px",
+                background:   pdfContext ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.08)",
+                border:       pdfContext ? "1px solid rgba(99,102,241,0.55)" : "1px solid rgba(165,180,252,0.38)",
+                borderRadius: "8px",
+                padding:      "6px 8px",
+                minWidth:     "34px",
+                minHeight:    "32px",
                 cursor:       isPDFLoading ? "wait" : "pointer",
                 display:      "flex",
                 alignItems:   "center",
                 justifyContent: "center",
-                color:        pdfContext ? "var(--accent-primary)" : "var(--text-secondary)",
+                color:        "var(--text-primary)",
                 transition:   "all 0.2s ease",
                 opacity:      isPDFLoading ? 0.6 : 1,
+                boxShadow:    pdfContext ? "0 0 14px rgba(99,102,241,0.28)" : "0 0 10px rgba(165,180,252,0.12)",
               }}
               onMouseEnter={(e) => {
-                if (!pdfContext) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)";
-                  (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
-                }
+                (e.currentTarget as HTMLButtonElement).style.background = pdfContext
+                  ? "rgba(99,102,241,0.3)"
+                  : "rgba(165,180,252,0.16)";
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(165,180,252,0.65)";
+                (e.currentTarget as HTMLButtonElement).style.color = "white";
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 0 16px rgba(165,180,252,0.3)";
               }}
               onMouseLeave={(e) => {
-                if (!pdfContext) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-                  (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
-                }
+                (e.currentTarget as HTMLButtonElement).style.background = pdfContext
+                  ? "rgba(99,102,241,0.22)"
+                  : "rgba(255,255,255,0.08)";
+                (e.currentTarget as HTMLButtonElement).style.borderColor = pdfContext
+                  ? "rgba(99,102,241,0.55)"
+                  : "rgba(165,180,252,0.38)";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = pdfContext
+                  ? "0 0 14px rgba(99,102,241,0.28)"
+                  : "0 0 10px rgba(165,180,252,0.12)";
               }}
 
             >
               {isPDFLoading ? (
                 // Spinning loader while PDF is being parsed
-                <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                 </svg>
               ) : (
                 // Paperclip icon
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </svg>
               )}
@@ -593,6 +732,72 @@ export default function ChatShell() {
               }}
             />
           </div>
+
+          {pinnedContexts.length > 0 && (
+            <div style={{
+              margin: "8px 16px 0",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "6px",
+            }}>
+              {pinnedContexts.map((ctx) => (
+                <span
+                  key={ctx.source_id}
+                  title={ctx.source_id}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    maxWidth: "100%",
+                    padding: "4px 6px 4px 8px",
+                    borderRadius: "999px",
+                    background: "rgba(16,185,129,0.12)",
+                    border: "1px solid rgba(16,185,129,0.28)",
+                    color: "var(--status-success)",
+                    fontSize: "11px",
+                    lineHeight: 1.3,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}>
+                    {ctx.source_id}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setPinnedContexts((prev) =>
+                        prev.filter((pinned) => pinned.source_id !== ctx.source_id)
+                      )
+                    }
+                    title={`Remove ${ctx.source_id}`}
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "50%",
+                      border: "none",
+                      background: "rgba(16,185,129,0.2)",
+                      color: "var(--status-success)",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "12px",
+                      lineHeight: 1,
+                      padding: 0,
+                      flexShrink: 0,
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Input textarea */}
           <QueryInput
