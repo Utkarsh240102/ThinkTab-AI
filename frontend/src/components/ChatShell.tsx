@@ -62,40 +62,68 @@ export default function ChatShell() {
   const { parseFile, isLoading: isPDFLoading, statusText: pdfStatusText, error: pdfError, clearError: clearPDFError } = usePDFParser();
 
   /* ── When a final answer arrives, add it to the message list ── */
+  const processedAnswerRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!finalAnswer) return;
+    if (!finalAnswer) {
+      processedAnswerRef.current = null;
+      return;
+    }
 
-    const assistantMsg: AssistantMessage = {
-      id:               crypto.randomUUID(),
-      role:             "assistant",
-      answer:           finalAnswer.answer,
-      evidence:         finalAnswer.evidence,
-      confidence_score: finalAnswer.confidence_score,
-      mode:             displayMode ?? "",
-      isTyping:         true,
-    };
+    // Ensure the effect only processes each unique message once
+    const answerHash = JSON.stringify(finalAnswer);
+    if (processedAnswerRef.current === answerHash) return;
+    processedAnswerRef.current = answerHash;
 
-    setMessages((prev) => [...prev, assistantMsg]);
+    // Safely batch state updates to prevent synchronous cascading renders
+    const timeoutId = setTimeout(() => {
+      const assistantMsg: AssistantMessage = {
+        id:               crypto.randomUUID(),
+        role:             "assistant",
+        answer:           finalAnswer.answer,
+        evidence:         finalAnswer.evidence,
+        confidence_score: finalAnswer.confidence_score,
+        mode:             displayMode ?? "",
+        isTyping:         true,
+      };
 
-    /* Update chat history so the Contextualizer can resolve pronouns */
-    // BUG-007 FIX: Cap state at 60 messages (30 turns) to prevent memory leak.
-    // The backend payload is independently capped at slice(-10) in useSSEChat.ts.
-    setChatHistory((prev) => [
-      ...prev,
-      { role: "assistant" as const, content: finalAnswer.answer },
-    ].slice(-60));
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      /* Update chat history so the Contextualizer can resolve pronouns */
+      // BUG-007 FIX: Cap state at 60 messages (30 turns) to prevent memory leak.
+      // The backend payload is independently capped at slice(-10) in useSSEChat.ts.
+      setChatHistory((prev) => [
+        ...prev,
+        { role: "assistant" as const, content: finalAnswer.answer },
+      ].slice(-60));
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalAnswer]);
 
   /* ── When an error arrives, show it as an Error message ── */
+  const processedErrorRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!error) return;
-    const errMsg: ErrorMessage = {
-      id:      crypto.randomUUID(),
-      role:    "error",
-      message: error,
-    };
-    setMessages((prev) => [...prev, errMsg]);
+    if (!error) {
+      processedErrorRef.current = null;
+      return;
+    }
+
+    if (processedErrorRef.current === error) return;
+    processedErrorRef.current = error;
+
+    const timeoutId = setTimeout(() => {
+      const errMsg: ErrorMessage = {
+        id:      crypto.randomUUID(),
+        role:    "error",
+        message: error,
+      };
+      setMessages((prev) => [...prev, errMsg]);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, [error]);
 
   useEffect(() => {

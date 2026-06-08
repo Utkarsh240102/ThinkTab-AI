@@ -72,7 +72,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ contexts: [mergedContext] });
   }
 
-  // Return true to indicate we will send a response asynchronously 
-  // (though in this specific synchronous case it's just good practice)
-  return true; 
 });
