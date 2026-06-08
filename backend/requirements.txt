@@ -29,8 +29,9 @@ cohere
 # Web Search (Serper — Google Search API via direct HTTP)
 requests
 
-# HTTP Client (for tests)
+# HTTP Client & Testing (for tests)
 httpx
+pytest
 
 # Document Processing
 pypdf

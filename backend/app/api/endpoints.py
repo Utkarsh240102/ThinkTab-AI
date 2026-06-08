@@ -124,6 +124,9 @@ async def upload_pdf(file: UploadFile = File(...)):
     # ── Guard 3: File size limit ─────────────────────────────────────────────
     # Reject files larger than 20 MB to protect server memory.
     # We check AFTER reading so we have the actual byte count.
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
     if len(file_bytes) > MAX_PDF_SIZE_BYTES:
         size_mb = len(file_bytes) / 1024 / 1024
         raise HTTPException(
