@@ -1,164 +1,133 @@
 import hashlib
 import threading
 from collections import OrderedDict
+from typing import TypeVar, Generic, Callable, Optional
+
 from langchain_community.vectorstores import FAISS
 from app.services.embedder import chunk_and_embed
 from app.core.config import settings
 
+T = TypeVar("T")
 
-class LRUEmbeddingCache:
+class ThreadSafeLRUCache(Generic[T]):
     """
-    An LRU (Least Recently Used) cache for FAISS vector indexes.
-
-    How it works:
-    - Stores up to `max_size` FAISS indexes in memory (default: 20).
-    - Uses the SHA-256 hash of `source_id + "::" + content` as the cache key.
-    - When the cache is full, it silently deletes the index that was
-      least recently accessed to make room for the new one.
-    - If the same page content is seen again, we skip re-embedding and
-      instantly return the stored FAISS index.
+    A generic, data-agnostic thread-safe LRU cache.
+    Handles memory management, eviction, and locking independently of business logic.
     """
-
-    def __init__(self, max_size: int | None = None):
-        # OrderedDict remembers insertion/access order — perfect for LRU!
-        self.cache: OrderedDict[str, FAISS] = OrderedDict()
-        self.max_size = max_size or settings.MAX_CACHE_PAGES  # Default: 20
-        # Reverse lookup: source_id → content hash key
-        # Needed so we can evict by source_id (the cache key is a content hash,
-        # not the source_id, so we need this map to find the right entry to delete)
-        self.source_id_to_key: dict[str, str] = {}
-        # RLock (reentrant) allows the same thread to acquire the lock multiple
-        # times without deadlocking. This is critical because get_or_embed()
-        # calls both get() and set(), which are themselves locked.
-        # Without this, concurrent requests can corrupt the OrderedDict.
+    def __init__(self, max_size: int | None = None, on_evict: Optional[Callable[[str], None]] = None):
+        self.cache: OrderedDict[str, T] = OrderedDict()
+        self.max_size = max_size or settings.MAX_CACHE_PAGES
         self._lock = threading.RLock()
+        self.on_evict = on_evict
 
-    def _make_key(self, content: str, source_id: str = "") -> str:
-        """
-        Generate a unique SHA-256 fingerprint for content + source pairing.
-
-        We include source_id in the hash (not just content) so that two different
-        sources with identical text (e.g., stripe.com/pricing and stripe.com/en-gb/pricing)
-        get SEPARATE cache entries with the correct metadata for each.
-
-        Same content + same source → same key (cache hit, skip re-embedding) ✅
-        Same content + diff source → different key (separate entry, correct citation) ✅
-        """
-        combined = f"{source_id}::{content}"
-        return hashlib.sha256(combined.encode("utf-8")).hexdigest()
-
-    def get(self, content: str, source_id: str = "") -> FAISS | None:
-        """
-        Check if this content has already been embedded and cached.
-
-        Returns the FAISS index if found (cache HIT), or None if not (cache MISS).
-        On a HIT, we move the entry to the END of the OrderedDict so it is
-        treated as the "most recently used" (preventing it from being evicted soon).
-        """
-        key = self._make_key(content, source_id)
+    def get(self, key: str) -> T | None:
         with self._lock:
             if key in self.cache:
-                # Move to end = mark as recently used
                 self.cache.move_to_end(key)
-                print(f"[Cache HIT] Reusing existing FAISS index for hash {key[:8]}...")
                 return self.cache[key]
-
-        print(f"[Cache MISS] No cached index found for hash {key[:8]}...")
         return None
 
-    def set(self, content: str, source_id: str) -> FAISS:
-        """
-        Embed the content, store it in the cache, and return the FAISS index.
-
-        If the cache is already full (max_size reached), it evicts the LEAST
-        recently used entry (the one at the START of the OrderedDict) first.
-        """
-        key = self._make_key(content, source_id)
-
+    def set(self, key: str, value: T) -> None:
         with self._lock:
-            # Guard: already cached — return without re-embedding
             if key in self.cache:
                 self.cache.move_to_end(key)
-                return self.cache[key]
+                self.cache[key] = value
+                return
 
-            # Evict the oldest entry if we are at capacity
             if len(self.cache) >= self.max_size:
-                evicted_key, _ = self.cache.popitem(last=False)  # Remove from START (oldest)
-                print(f"[Cache EVICT] Cache full ({self.max_size} pages). Removed oldest entry {evicted_key[:8]}...")
-                # Also clean up the reverse lookup so it doesn't grow unbounded
-                self.source_id_to_key = {
-                    sid: k for sid, k in self.source_id_to_key.items() if k != evicted_key
-                }
+                evicted_key, _ = self.cache.popitem(last=False)
+                print(f"[Cache EVICT] Cache full ({self.max_size} items). Removed oldest entry {evicted_key[:8]}...")
+                if self.on_evict:
+                    self.on_evict(evicted_key)
 
-            # Evict stale entry for this source_id if the content has changed
-            old_key = self.source_id_to_key.get(source_id)
-            if old_key and old_key != key and old_key in self.cache:
-                del self.cache[old_key]
-                print(f"[Cache UPDATE] Content changed for '{source_id}'. Evicted stale entry {old_key[:8]}...")
+            self.cache[key] = value
 
-        # ── Embed OUTSIDE the lock ─────────────────────────────────────────────
-        # chunk_and_embed is CPU-bound and can take seconds. Holding the lock
-        # during embedding would block ALL concurrent reads for that entire time.
-        # Instead, we embed freely and re-acquire the lock only to write the result.
-        print(f"[Cache SET] Embedding new content for source '{source_id}'...")
-        faiss_index = chunk_and_embed(content, source_id)
-
+    def delete(self, key: str) -> bool:
         with self._lock:
-            # Double-check: another thread may have embedded the same content
-            # while we were working. Only write if the slot is still empty.
-            if key not in self.cache:
-                self.cache[key] = faiss_index
-                self.source_id_to_key[source_id] = key  # Register in reverse lookup
-
-        return faiss_index
-
-
-    def get_or_embed(self, content: str, source_id: str) -> FAISS:
-        """
-        The main public method used by the rest of the app.
-
-        1. Check the cache first (instant).
-        2. If not found, embed the content and cache it.
-
-        Usage:
-            faiss_index = embedding_cache.get_or_embed(page_text, "stripe.com")
-            results = faiss_index.similarity_search(query, k=10)
-        """
-        cached = self.get(content, source_id)
-        if cached is not None:
-            return cached
-
-        return self.set(content, source_id)
-
-    def delete_by_source_id(self, source_id: str) -> bool:
-        """
-        Evict a specific source from the cache by its source_id.
-
-        Returns True if the entry was found and evicted, False if not found.
-
-        This is called by DELETE /api/cache/{source_id} so the Chrome Extension
-        can force-refresh a page when its content has changed.
-        """
-        with self._lock:
-            key = self.source_id_to_key.get(source_id)
-            if key is None:
-                print(f"[Cache DELETE] source_id '{source_id}' not found in cache.")
-                return False
-
             if key in self.cache:
                 del self.cache[key]
-            del self.source_id_to_key[source_id]
-            print(f"[Cache DELETE] Evicted '{source_id}' (hash {key[:8]}...) from cache.")
-            return True
+                return True
+            return False
 
     @property
     def size(self) -> int:
-        """Returns how many entries are currently in the cache."""
         with self._lock:
             return len(self.cache)
 
 
+class VectorStoreFacade:
+    """
+    Facade handling business logic: content hashing, embedding, and caching FAISS indexes.
+    """
+    def __init__(self):
+        # Pass a callback to clean up our reverse lookup map when the cache evicts an item
+        self._cache = ThreadSafeLRUCache[FAISS](
+            max_size=settings.MAX_CACHE_PAGES, 
+            on_evict=self._handle_eviction
+        )
+        self._source_id_to_key: dict[str, str] = {}
+        self._lock = threading.RLock()
+
+    def _handle_eviction(self, evicted_key: str) -> None:
+        with self._lock:
+            self._source_id_to_key = {
+                sid: k for sid, k in self._source_id_to_key.items() if k != evicted_key
+            }
+
+    def _make_key(self, content: str, source_id: str = "") -> str:
+        combined = f"{source_id}::{content}"
+        return hashlib.sha256(combined.encode("utf-8")).hexdigest()
+
+    def get_or_embed(self, content: str, source_id: str) -> FAISS:
+        key = self._make_key(content, source_id)
+
+        with self._lock:
+            old_key = self._source_id_to_key.get(source_id)
+            if old_key and old_key != key:
+                self._cache.delete(old_key)
+                print(f"[Cache UPDATE] Content changed for '{source_id}'. Evicted stale entry {old_key[:8]}...")
+
+            cached = self._cache.get(key)
+            if cached is not None:
+                print(f"[Cache HIT] Reusing existing FAISS index for hash {key[:8]}...")
+                self._source_id_to_key[source_id] = key
+                return cached
+
+        print(f"[Cache MISS] No cached index found for hash {key[:8]}...")
+        
+        # Embed OUTSIDE the lock
+        print(f"[Cache SET] Embedding new content for source '{source_id}'...")
+        faiss_index = chunk_and_embed(content, source_id)
+
+        with self._lock:
+            # Check again to avoid duplicate work if another thread just embedded it
+            cached_again = self._cache.get(key)
+            if cached_again is not None:
+                return cached_again
+                
+            self._cache.set(key, faiss_index)
+            self._source_id_to_key[source_id] = key
+
+        return faiss_index
+
+    def delete_by_source_id(self, source_id: str) -> bool:
+        with self._lock:
+            key = self._source_id_to_key.get(source_id)
+            if key is None:
+                print(f"[Cache DELETE] source_id '{source_id}' not found in cache.")
+                return False
+
+            deleted = self._cache.delete(key)
+            del self._source_id_to_key[source_id]
+            if deleted:
+                print(f"[Cache DELETE] Evicted '{source_id}' (hash {key[:8]}...) from cache.")
+            return deleted
+
+    @property
+    def size(self) -> int:
+        return self._cache.size
+
 # ─────────────────────────────────────────────────────────────
 # Global singleton instance — import this everywhere in the app
 # ─────────────────────────────────────────────────────────────
-embedding_cache = LRUEmbeddingCache()
+embedding_cache = VectorStoreFacade()
