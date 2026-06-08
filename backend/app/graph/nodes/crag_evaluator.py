@@ -3,7 +3,6 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.graph.state import GraphState
-from app.services.llm_service import fast_llm
 from app.core.config import settings
 
 
