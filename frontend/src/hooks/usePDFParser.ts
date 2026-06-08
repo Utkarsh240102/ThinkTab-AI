@@ -97,7 +97,12 @@ export function usePDFParser(): UsePDFParserReturn {
 
         // Join all text fragments on this page into one string
         const pageText = textContent.items
-          .map((item: any) => ("str" in item ? item.str : ""))
+          .map((item: unknown) => {
+            if (item && typeof item === "object" && "str" in item) {
+              return (item as { str: string }).str;
+            }
+            return "";
+          })
           .join(" ")
           .trim();
 
@@ -143,11 +148,12 @@ export function usePDFParser(): UsePDFParserReturn {
             pageCount: data.page_count,
             isScanned: true, // We know it was scanned because it hit the fallback
           };
-        } catch (serverErr: any) {
+        } catch (serverErr: unknown) {
           console.error("[usePDFParser] Server fallback failed:", serverErr);
+          const errMsg = serverErr instanceof Error ? serverErr.message : String(serverErr);
           // If the server fails, we'll just fall through and return the 
           // (likely useless) local text, but we'll show an error.
-          setError(`Advanced parsing failed: ${serverErr.message}`);
+          setError(`Advanced parsing failed: ${errMsg}`);
           return null; // Return null instead of the bad text
         }
       }
@@ -159,18 +165,19 @@ export function usePDFParser(): UsePDFParserReturn {
         isScanned: false,
       };
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Translate cryptic pdfjs errors into user-friendly messages
       console.error("[usePDFParser] Error:", err);
-      if (err?.message?.includes("Invalid PDF")) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      
+      if (errMsg.includes("Invalid PDF")) {
         setError("This file does not appear to be a valid PDF. Please try another file.");
-      } else if (err?.message?.includes("password")) {
+      } else if (errMsg.includes("password")) {
         setError("This PDF is password-protected. Please remove the password and try again.");
       } else {
         setError("Failed to read the PDF file. Please try again.");
       }
       return null;
-
     } finally {
       // Always reset loading states — even if parsing failed
       setIsLoading(false);
