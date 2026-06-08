@@ -156,7 +156,7 @@ export default function ChatShell() {
           )
         );
     }
-  }, [chatHistory]);
+  }, [chatHistory, historySummary]);
 
   /* Auto-scroll to bottom on new messages or status */
   useEffect(() => {
