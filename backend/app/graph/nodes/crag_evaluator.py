@@ -26,6 +26,10 @@ Score how relevant EACH chunk is to answering the question on a scale of 0.0 to 
   0.0 = completely irrelevant or off-topic
   1.0 = contains the exact answer or highly relevant facts
 
+  PARTIAL & MULTI-HOP QUERIES:
+  If the user asks a comparative or multi-part question (e.g., comparing two subjects from different sources), a chunk that provides highly relevant facts about AT LEAST ONE of those subjects MUST be scored highly (e.g., 0.8 to 1.0).
+  A chunk does NOT need to contain the full answer to be relevant. If it contributes a necessary piece of the puzzle, grade it as highly relevant.
+
 CRITICAL COUNTING RULE:
 - Count how many chunks are labeled "Chunk X of Y" in the input.
 - You MUST return exactly that many scores — one score per chunk, in order.
@@ -69,6 +73,7 @@ def eval_docs(state: GraphState) -> GraphState:
         "overview", "briefly explain", "brief overview",
         "what does this page say", "what is this about",
         "give me a brief", "tldr", "tl;dr",
+        "explain", "compare", "tell me about",
     ]
     query_lower = query.lower()
     if any(kw in query_lower for kw in SUMMARY_KEYWORDS):

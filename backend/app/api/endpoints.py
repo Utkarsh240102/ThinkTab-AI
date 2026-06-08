@@ -16,6 +16,10 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 router = APIRouter()
 
+@router.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 DEEP_NODE_MESSAGES = {
     "contextualize_query": "Understanding question... 🤔",
     "retrieve_and_rerank": "Searching documents... 🔍",
