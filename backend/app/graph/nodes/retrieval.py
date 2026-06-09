@@ -72,6 +72,23 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
     has_pdf = any(kw in _query_lower for kw in _PDF_SIGNALS)
     has_both = any(kw in _query_lower for kw in _BOTH_SIGNALS)
 
+    # Dynamically check if the query mentions specific tab titles (e.g. "india" or "animal")
+    for ctx in contexts:
+        s_id_lower = ctx.get("source_id", "").lower()
+        # Extract title: "Pinned Tab: India - Wikipedia" -> "india - wikipedia"
+        title = s_id_lower.split(":", 1)[-1].strip()
+        # Also get the short title before the dash: "india - wikipedia" -> "india"
+        short_title = title.split(" - ")[0].strip() if " - " in title else title
+        
+        # If the query mentions the title or short title (e.g. "india")
+        if (title and title in _query_lower) or (short_title and short_title in _query_lower):
+            if s_id_lower.startswith("active"):
+                has_active = True
+            elif s_id_lower.startswith("pinned"):
+                has_pinned = True
+            elif s_id_lower.endswith(".pdf"):
+                has_pdf = True
+
     if has_both or sum([has_active, has_pinned, has_pdf]) > 1:
         source_filter = None
         print("[Retrieval] Source intent: BOTH/MULTIPLE sources detected -> searching all sources")
