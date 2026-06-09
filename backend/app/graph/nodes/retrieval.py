@@ -92,12 +92,13 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         # ── Source-intent gate ────────────────────────────────────────────────
         # Skip this context if it doesn't match the source the user asked about.
         is_pdf = source_id.lower().endswith('.pdf')
-        is_active = (source_id == "Active Tab")
+        is_active = source_id.startswith("Active Tab")
+        is_pinned = source_id.startswith("Pinned Tab")
 
         if source_filter == "active" and not is_active:
             print(f"[Retrieval] Skipping '{source_id}' (active-only intent)")
             continue
-        if source_filter == "pinned" and (is_active or is_pdf):
+        if source_filter == "pinned" and not is_pinned:
             print(f"[Retrieval] Skipping '{source_id}' (pinned-only intent)")
             continue
         if source_filter == "pdf" and not is_pdf:
