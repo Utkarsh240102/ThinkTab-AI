@@ -62,7 +62,19 @@ def contextualize_query(state: GraphState) -> GraphState:
         else ""
     )
 
-    system_prompt = CONTEXTUALIZER_SYSTEM_PROMPT + summary_text
+    contexts = state.get("contexts", [])
+    source_names = list(set([ctx.get("source_id", "Unknown") for ctx in contexts]))
+    sources_str = "\n".join([f"- {s}" for s in source_names]) if source_names else "None"
+    
+    source_mapping_text = f"""
+AVAILABLE CONTEXT SOURCES IN THIS SESSION:
+{sources_str}
+
+CRITICAL MAPPING RULE: If the user's query contains UI terminology like "the pinned tab", "the active tab", "this page", or "the pdf", you MUST replace those generic terms with the exact matching source name from the list above! Do NOT just leave it as "the pinned tab".
+Example: "explain me the pinned tab" -> "Explain Pinned Tab: Animal - Wikipedia"
+"""
+
+    system_prompt = CONTEXTUALIZER_SYSTEM_PROMPT + summary_text + source_mapping_text
 
     # ── Call gpt-4o-mini to rewrite the query ──
     messages = [
