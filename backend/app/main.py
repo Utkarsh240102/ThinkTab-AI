@@ -5,12 +5,25 @@ from dotenv import load_dotenv
 # This ensures LangSmith tracing variables are set before LangChain initializes
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, Request  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.api.endpoints import router as api_router  # noqa: E402
+import traceback  # noqa: E402
+import re  # noqa: E402
 
 app = FastAPI(title="ThinkTab AI Backend")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"[Global Error Handler] {traceback.format_exc()}")
+    _raw = str(exc)
+    _safe = re.sub(r'(sk-|key-|Bearer )[a-zA-Z0-9\-_\.]+', '[REDACTED]', _raw)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected internal server error occurred.", "error": _safe}
+    )
 
 # Allow the Chrome Extension to talk to this server
 app.add_middleware(
