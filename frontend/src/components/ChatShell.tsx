@@ -163,7 +163,7 @@ export default function ChatShell() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, statusText]);
 
-  const BACKEND_URL = "http://127.0.0.1:8000";
+  const BACKEND_URL = "http://localhost:8000";
 
   /* ── Reusable Tab Scraper ── */
   async function scrapeActiveTab(): Promise<Context[]> {
