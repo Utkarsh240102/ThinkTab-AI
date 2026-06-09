@@ -295,6 +295,7 @@ export default function ChatShell() {
     // BUG-002 FIX: Re-scrape the active tab so Deep Mode has real page content.
     const scrapedContexts = await scrapeActiveTab();
     const allContexts = [...scrapedContexts];
+    allContexts.push(...pinnedContexts);
     if (pdfContext) allContexts.push(pdfContext);
     sendQuery(lastQuery, "deep", allContexts, chatHistory);
   }
