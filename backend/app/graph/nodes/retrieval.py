@@ -123,10 +123,15 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         print(f"[Retrieval] Retrieved {len(raw_docs)} raw chunks from {source_id}")
         all_docs.extend(raw_docs)
 
-    # Guard: If no docs retrieved at all, return empty
+    # Guard: If no docs retrieved at all, return a fallback document
     if not all_docs:
         print("[Retrieval] WARNING: No documents found in any source!")
-        return {**state, "docs": []}
+        from langchain_core.documents import Document
+        fallback = Document(
+            page_content="No local context or webpage text was provided.",
+            metadata={"source": "system"}
+        )
+        return {**state, "docs": [fallback]}
 
     # Step 2: Re-rank all collected chunks
     SUMMARY_KEYWORDS = ["summarize", "summary", "overview", "brief", "compare", "explain", "tell me about"]
