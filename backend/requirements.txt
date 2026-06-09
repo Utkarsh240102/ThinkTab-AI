@@ -20,7 +20,8 @@ langgraph
 langsmith
 
 # Vector Store
-faiss-cpu
+chromadb
+langchain-chroma
 
 # Re-Ranking
 sentence-transformers
