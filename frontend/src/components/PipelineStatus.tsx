@@ -1,4 +1,4 @@
-import React from "react";
+
 import StatusBubble from "./StatusBubble";
 import ErrorBubble from "./ErrorBubble";
 
