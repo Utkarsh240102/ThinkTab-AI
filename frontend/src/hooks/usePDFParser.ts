@@ -14,7 +14,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 // A real text PDF always has more than this.
 // If we get less, it's almost certainly scanned (image-only).
 const SCANNED_PDF_THRESHOLD = 100;
-const BACKEND_URL = "http://127.0.0.1:8000";
+const BACKEND_URL = "http://localhost:8000";
 
 // ── Return type of the hook ───────────────────────────────────────────────────
 export interface PDFParseResult {
