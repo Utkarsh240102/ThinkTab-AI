@@ -395,7 +395,7 @@ async def chat(request: ChatRequest):
             })
             yield sse_event({
                 "type": "final",
-                "answer": "An internal error occurred. Please try again.",
+                "answer": f"**Oops! An internal error occurred.**\n\n```text\n{_safe}\n```\n\nPlease try again.",
                 "evidence": [],
                 "confidence_score": 0.0,
                 "reasoning_summary": f"Error Details: {_safe}"
