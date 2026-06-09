@@ -10,6 +10,7 @@ CONTEXTUALIZER_SYSTEM_PROMPT = """You are a query rewriter. Your ONLY job is to 
 
 Rules:
 - Resolve ALL pronouns and references using the conversation history (e.g. "it", "that", "the second one", "them")
+- CRITICAL: Aggressively substitute vague nouns like "the two webpages", "both documents", or "the tab" with their actual concrete topics from the conversation history (e.g. "the Animal webpage and the India webpage").
 - Do NOT add new information or assumptions
 - Do NOT answer the question — only rewrite it
 - If the question is already standalone and clear, return it exactly as-is
@@ -61,13 +62,7 @@ def contextualize_query(state: GraphState) -> GraphState:
         else ""
     )
 
-    system_prompt = (
-        "Given a chat history and the latest user question "
-        "which might reference context in the chat history, formulate a standalone question "
-        "which can be understood without the chat history. Do NOT answer the question, "
-        "just reformulate it if needed and otherwise return it as is."
-        f"{summary_text}"
-    )
+    system_prompt = CONTEXTUALIZER_SYSTEM_PROMPT + summary_text
 
     # ── Call gpt-4o-mini to rewrite the query ──
     messages = [
