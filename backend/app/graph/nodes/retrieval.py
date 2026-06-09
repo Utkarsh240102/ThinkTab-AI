@@ -111,14 +111,16 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
             print(f"[Retrieval] WARNING: Skipping empty content for source '{source_id}'")
             continue
 
-        print(f"[Retrieval] Searching FAISS for source: {source_id}")
+        print(f"[Retrieval] Searching ChromaDB for source: {source_id}")
 
-        # get_or_embed: returns cached FAISS index or embeds fresh
-        faiss_index = await asyncio.to_thread(embedding_cache.get_or_embed, content, source_id)
+        # ensure_embedded: parses and embeds fresh content if source_id not found in ChromaDB
+        await asyncio.to_thread(embedding_cache.ensure_embedded, content, source_id)
 
-        raw_docs = faiss_index.similarity_search(
+        raw_docs = await asyncio.to_thread(
+            embedding_cache.search,
             query,
-            k=retrieve_k
+            source_id,
+            retrieve_k
         )
 
         print(f"[Retrieval] Retrieved {len(raw_docs)} raw chunks from {source_id}")
