@@ -124,6 +124,9 @@ async def upload_pdf(file: UploadFile = File(...)):
     # ── Guard 3: File size limit ─────────────────────────────────────────────
     # Reject files larger than 20 MB to protect server memory.
     # We check AFTER reading so we have the actual byte count.
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
     if len(file_bytes) > MAX_PDF_SIZE_BYTES:
         size_mb = len(file_bytes) / 1024 / 1024
         raise HTTPException(
@@ -131,27 +134,30 @@ async def upload_pdf(file: UploadFile = File(...)):
             detail=f"File too large ({size_mb:.1f} MB). Maximum allowed size is 20 MB."
         )
 
-    # ── Extract text using PyMuPDF ───────────────────────────────────────────
-    try:
-        # Open the PDF from raw bytes — never writes to disk.
-        # stream= tells fitz to read from memory instead of a file path.
-        pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+    # ── Guard 4: PDF Magic Signature ─────────────────────────────────────────
+    # Even if the content-type is correct, the file might be renamed or corrupted.
+    # All valid PDFs must start with the magic bytes '%PDF-'.
+    if not file_bytes.startswith(b"%PDF-"):
+        raise HTTPException(
+            status_code=415,
+            detail="The uploaded file is not a valid PDF document (missing magic signature)."
+        )
 
+    # ── Extract text using PyMuPDF (Offloaded to thread) ─────────────────────
+    def _extract_pdf_text(raw_bytes: bytes) -> tuple[str, int]:
+        pdf_doc = fitz.open(stream=raw_bytes, filetype="pdf")
         page_texts = []
         for page in pdf_doc:
-            # get_text() extracts all readable text from the page.
-            # "text" mode returns a plain string (vs "dict" or "html" modes).
             page_text = page.get_text("text").strip()
             if page_text:
                 page_texts.append(page_text)
-
         page_count = len(pdf_doc)
-
-        # Always close the document to free C-level memory immediately
         pdf_doc.close()
+        return "\n\n".join(page_texts), page_count
 
-        # Join all pages with double newline (paragraph break between pages)
-        full_text = "\n\n".join(page_texts)
+    try:
+        # Run the heavy C++ extraction in a background thread so we don't block the async event loop
+        full_text, page_count = await asyncio.to_thread(_extract_pdf_text, file_bytes)
 
         print(f"[PDF Upload] Parsed '{file.filename}' — {page_count} pages, {len(full_text)} chars extracted.")
 
@@ -389,7 +395,7 @@ async def chat(request: ChatRequest):
             })
             yield sse_event({
                 "type": "final",
-                "answer": "An internal error occurred. Please try again.",
+                "answer": f"**Oops! An internal error occurred.**\n\n```text\n{_safe}\n```\n\nPlease try again.",
                 "evidence": [],
                 "confidence_score": 0.0,
                 "reasoning_summary": f"Error Details: {_safe}"

@@ -156,14 +156,14 @@ export default function ChatShell() {
           )
         );
     }
-  }, [chatHistory]);
+  }, [chatHistory, historySummary]);
 
   /* Auto-scroll to bottom on new messages or status */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, statusText]);
 
-  const BACKEND_URL = "http://127.0.0.1:8000";
+  const BACKEND_URL = "http://localhost:8000";
 
   /* ── Reusable Tab Scraper ── */
   async function scrapeActiveTab(): Promise<Context[]> {

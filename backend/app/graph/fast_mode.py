@@ -83,7 +83,7 @@ async def run_fast_mode(initial_state: GraphState) -> AsyncGenerator[str, None]:
 
     # Step 2: Retrieve & Re-rank
     yield sse("status", {"value": "Retrieving relevant paragraphs... "})
-    state = await asyncio.to_thread(retrieve_and_rerank, state)
+    state = await retrieve_and_rerank(state)
 
     # Step 3: Fast CRAG Filter
     yield sse("status", {"value": "Filtering out noise... "})

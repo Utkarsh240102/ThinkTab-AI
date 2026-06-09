@@ -1,4 +1,5 @@
 import os
+import asyncio
 from sentence_transformers import CrossEncoder
 from langchain_core.documents import Document
 from app.services.vector_store import embedding_cache
@@ -24,7 +25,7 @@ reranker = CrossEncoder(
 print("[Retrieval] Re-ranker ready.")
 
 
-def retrieve_and_rerank(state: GraphState) -> GraphState:
+async def retrieve_and_rerank(state: GraphState) -> GraphState:
     """
     LangGraph Node: Retrieval + Re-ranking
 
@@ -113,7 +114,7 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         print(f"[Retrieval] Searching FAISS for source: {source_id}")
 
         # get_or_embed: returns cached FAISS index or embeds fresh
-        faiss_index = embedding_cache.get_or_embed(content, source_id)
+        faiss_index = await asyncio.to_thread(embedding_cache.get_or_embed, content, source_id)
 
         raw_docs = faiss_index.similarity_search(
             query,
@@ -123,10 +124,15 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         print(f"[Retrieval] Retrieved {len(raw_docs)} raw chunks from {source_id}")
         all_docs.extend(raw_docs)
 
-    # Guard: If no docs retrieved at all, return empty
+    # Guard: If no docs retrieved at all, return a fallback document
     if not all_docs:
         print("[Retrieval] WARNING: No documents found in any source!")
-        return {**state, "docs": []}
+        from langchain_core.documents import Document
+        fallback = Document(
+            page_content="No local context or webpage text was provided.",
+            metadata={"source": "system"}
+        )
+        return {**state, "docs": [fallback]}
 
     # Step 2: Re-rank all collected chunks
     SUMMARY_KEYWORDS = ["summarize", "summary", "overview", "brief", "compare", "explain", "tell me about"]
@@ -157,7 +163,7 @@ def retrieve_and_rerank(state: GraphState) -> GraphState:
         pairs = [(query, doc.page_content) for doc in all_docs]
         
         # Score each pair — higher score = more relevant
-        scores = reranker.predict(pairs)
+        scores = await asyncio.to_thread(reranker.predict, pairs)
         
         # Zip scores with docs and sort by score descending
         scored_docs = sorted(zip(scores, all_docs), key=lambda x: x[0], reverse=True)

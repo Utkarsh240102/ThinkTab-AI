@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # API Keys
@@ -31,11 +31,6 @@ class Settings(BaseSettings):
     DEEP_MODE_RETRIEVE_K: int = 15   # Fetch more chunks for deep analysis
     DEEP_MODE_RERANK_TOP_K: int = 8  # Keep more chunks to feed into CRAG batch evaluator
 
-    class Config:
-        # BUG-013 FIX: removed env_file = "../../../.env" — that path is CWD-relative
-        # and breaks if uvicorn is started from any directory other than backend/.
-        # main.py loads .env first (anchored to __file__) before this module is
-        # imported, so pydantic_settings picks up all vars from os.environ automatically.
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

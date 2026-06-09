@@ -21,7 +21,7 @@ export default function Header({ activeMode, onClearChat }: HeaderProps) {
   useEffect(() => {
     async function pingBackend() {
       try {
-        const response = await fetch("http://127.0.0.1:8000/api/health");
+        const response = await fetch("http://localhost:8000/api/health");
         setIsOnline(response.ok);
       } catch {
         setIsOnline(false);

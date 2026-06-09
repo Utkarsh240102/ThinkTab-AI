@@ -15,6 +15,7 @@ langchain-openai
 langchain-google-genai
 langchain-text-splitters
 langchain-groq
+langchain-huggingface
 langgraph
 langsmith
 
@@ -28,8 +29,9 @@ cohere
 # Web Search (Serper — Google Search API via direct HTTP)
 requests
 
-# HTTP Client (for tests)
+# HTTP Client & Testing (for tests)
 httpx
+pytest
 
 # Document Processing
 pypdf
