@@ -91,7 +91,8 @@ def eval_docs(state: GraphState) -> GraphState:
     # always knows the total count it must match with its scores
     chunks_text = ""
     for i, doc in enumerate(docs):
-        chunks_text += f"\nChunk {i+1} of {len(docs)}: {doc.page_content}\n"
+        source_name = doc.metadata.get("source", "Unknown")
+        chunks_text += f"\nChunk {i+1} of {len(docs)} [Source: {source_name}]: {doc.page_content}\n"
 
     messages = [
         SystemMessage(content=CRAG_SYSTEM_PROMPT),
