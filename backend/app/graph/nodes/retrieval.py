@@ -62,7 +62,7 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
     # re-ranker from pulling chunks from the wrong place.
     
     _BOTH_SIGNALS = ["both webpages", "both pages", "all pages", "all tabs"]
-    _ACTIVE_SIGNALS = ["this page", "current page", "active tab", "current tab", "this webpage", "current webpage", "the website"]
+    _ACTIVE_SIGNALS = ["this page", "current page", "active tab", "current tab", "this webpage", "current webpage", "the website", "the webpage", "the page"]
     _PINNED_SIGNALS = ["pinned", "pinned tab", "pinned page", "other tab", "background tab"]
     _PDF_SIGNALS = ["pdf", "document", "the file", "the resume", "uploaded file", "attached file"]
 
