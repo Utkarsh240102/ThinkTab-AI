@@ -16,7 +16,7 @@ app = FastAPI(title="ThinkTab AI Backend")
 app.add_middleware(
     CORSMiddleware,
     # In production, this would be restricted to chrome-extension:// IDs
-    allow_origins=["*"],
+    allow_origin_regex=r"^(chrome-extension://.*|http://localhost:\d+|http://127\.0\.0\.1:\d+)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
