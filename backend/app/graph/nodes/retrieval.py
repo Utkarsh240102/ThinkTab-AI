@@ -61,16 +61,30 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
     # the PDF"), restricting retrieval to only that source prevents the
     # re-ranker from pulling chunks from the wrong place.
     
-    _BOTH_SIGNALS = ["both webpages", "both pages", "all pages", "all tabs"]
+    _BOTH_SIGNALS = [
+        "both webpages", "both pages", "both tab", "both tabs",
+        "all pages", "all tabs", "all tab", "all the tab", "all the tabs",
+        "every tab", "every page",
+    ]
     _ACTIVE_SIGNALS = ["this page", "current page", "active tab", "current tab", "this webpage", "current webpage", "the website", "the webpage", "the page"]
     _PINNED_SIGNALS = ["pinned", "pinned tab", "pinned page", "other tab", "background tab"]
     _PDF_SIGNALS = ["pdf", "document", "the file", "the resume", "uploaded file", "attached file"]
 
+    # ── CRITICAL: Check BOTH the rewritten query AND the original user query ──
+    # The Contextualizer rewrites "explain me the pinned tab" → "Explain Pinned Tab: Animal"
+    # which strips away keywords like "pinned tab" that the source filter needs.
+    # By checking the original_query too, we never lose the user's intent signals.
+    original_query = state.get("original_query", "")
     _query_lower = query.lower()
-    has_active = any(kw in _query_lower for kw in _ACTIVE_SIGNALS)
-    has_pinned = any(kw in _query_lower for kw in _PINNED_SIGNALS)
-    has_pdf = any(kw in _query_lower for kw in _PDF_SIGNALS)
-    has_both = any(kw in _query_lower for kw in _BOTH_SIGNALS)
+    _orig_lower = original_query.lower() if original_query else ""
+
+    def _has_signal(signals: list[str]) -> bool:
+        return any(kw in _query_lower for kw in signals) or any(kw in _orig_lower for kw in signals)
+
+    has_active = _has_signal(_ACTIVE_SIGNALS)
+    has_pinned = _has_signal(_PINNED_SIGNALS)
+    has_pdf = _has_signal(_PDF_SIGNALS)
+    has_both = _has_signal(_BOTH_SIGNALS)
 
     # Dynamically check if the query mentions specific tab titles (e.g. "india" or "animal")
     for ctx in contexts:
@@ -80,14 +94,26 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         # Also get the short title before the dash: "india - wikipedia" -> "india"
         short_title = title.split(" - ")[0].strip() if " - " in title else title
         
-        # If the query mentions the title or short title (e.g. "india")
-        if (title and title in _query_lower) or (short_title and short_title in _query_lower):
+        # Check both rewritten and original query for title mentions
+        mentioned = False
+        if short_title and len(short_title) > 2:  # avoid matching tiny strings
+            mentioned = (short_title in _query_lower) or (short_title in _orig_lower)
+        if not mentioned and title and len(title) > 2:
+            mentioned = (title in _query_lower) or (title in _orig_lower)
+        
+        if mentioned:
             if s_id_lower.startswith("active"):
                 has_active = True
             elif s_id_lower.startswith("pinned"):
                 has_pinned = True
             elif s_id_lower.endswith(".pdf"):
                 has_pdf = True
+
+    # If query explicitly asks to "compare" and we have multiple context sources,
+    # treat it as a multi-source query so nothing gets filtered out.
+    _COMPARE_SIGNALS = ["compare", "relation between", "difference between", "similarities between"]
+    if _has_signal(_COMPARE_SIGNALS) and len(contexts) > 1:
+        has_both = True
 
     if has_both or sum([has_active, has_pinned, has_pdf]) > 1:
         source_filter = None
@@ -161,7 +187,17 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
 
     # Step 2: Re-rank all collected chunks
     SUMMARY_KEYWORDS = ["summarize", "summary", "overview", "brief", "compare", "explain", "tell me about"]
-    is_summary = any(kw in query.lower() for kw in SUMMARY_KEYWORDS)
+    _orig_for_summary = state.get("original_query", "").lower()
+    is_summary = any(kw in query.lower() for kw in SUMMARY_KEYWORDS) or any(kw in _orig_for_summary for kw in SUMMARY_KEYWORDS)
+
+    # Boost chunk budget for multi-source queries so each source gets adequate representation
+    num_active_sources = len(set(doc.metadata.get("source", "unknown") for doc in all_docs))
+    if num_active_sources > 1:
+        min_per_source = 3
+        boosted_k = max(rerank_top_k, num_active_sources * min_per_source)
+        if boosted_k > rerank_top_k:
+            print(f"[Retrieval] Boosting rerank_top_k from {rerank_top_k} to {boosted_k} for {num_active_sources} sources")
+            rerank_top_k = boosted_k
 
     if is_summary:
         print("[Retrieval] Summary intent detected. Bypassing CrossEncoder and interleaving sources.")
@@ -171,8 +207,16 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
             if src not in docs_by_source:
                 docs_by_source[src] = []
             docs_by_source[src].append(doc)
-            
+
+        # Guarantee each source gets at least min_per_source chunks before round-robin fills the rest
         top_docs = []
+        guaranteed_per_source = min(3, rerank_top_k // max(len(docs_by_source), 1))
+        for src in list(docs_by_source.keys()):
+            for _ in range(guaranteed_per_source):
+                if docs_by_source[src]:
+                    top_docs.append(docs_by_source[src].pop(0))
+
+        # Fill remaining budget via round-robin
         while len(top_docs) < rerank_top_k and docs_by_source:
             for src in list(docs_by_source.keys()):
                 if docs_by_source[src]:
