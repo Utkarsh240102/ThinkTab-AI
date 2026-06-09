@@ -53,11 +53,10 @@ def test_upload_pdf_success(mock_fitz_open):
     assert data["page_count"] == 1
     assert data["source_id"] == "test.pdf"
 
-@patch("app.services.vector_store.embedding_cache.get_or_embed")
-def test_embed_endpoint_success(mock_get_or_embed):
-    # Mock FAISS index and prevent actual chunking/embedding
-    mock_index = MagicMock()
-    mock_get_or_embed.return_value = mock_index
+@patch("app.services.vector_store.embedding_cache.ensure_embedded")
+def test_embed_endpoint_success(mock_ensure_embedded):
+    # Mock ensure_embedded to do nothing
+    mock_ensure_embedded.return_value = None
 
     payload = {
         "source_id": "test_url",
