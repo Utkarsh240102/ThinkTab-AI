@@ -67,16 +67,21 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
     _PDF_SIGNALS = ["pdf", "document", "the file", "the resume", "uploaded file", "attached file"]
 
     _query_lower = query.lower()
-    if any(kw in _query_lower for kw in _BOTH_SIGNALS):
+    has_active = any(kw in _query_lower for kw in _ACTIVE_SIGNALS)
+    has_pinned = any(kw in _query_lower for kw in _PINNED_SIGNALS)
+    has_pdf = any(kw in _query_lower for kw in _PDF_SIGNALS)
+    has_both = any(kw in _query_lower for kw in _BOTH_SIGNALS)
+
+    if has_both or sum([has_active, has_pinned, has_pdf]) > 1:
         source_filter = None
-        print("[Retrieval] Source intent: BOTH active and pinned sources")
-    elif any(kw in _query_lower for kw in _ACTIVE_SIGNALS):
+        print("[Retrieval] Source intent: BOTH/MULTIPLE sources detected -> searching all sources")
+    elif has_active:
         source_filter = "active"
         print("[Retrieval] Source intent: ACTIVE TAB only")
-    elif any(kw in _query_lower for kw in _PINNED_SIGNALS):
+    elif has_pinned:
         source_filter = "pinned"
         print("[Retrieval] Source intent: PINNED TAB only")
-    elif any(kw in _query_lower for kw in _PDF_SIGNALS):
+    elif has_pdf:
         source_filter = "pdf"
         print("[Retrieval] Source intent: PDF only")
     else:
