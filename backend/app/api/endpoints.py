@@ -429,7 +429,10 @@ async def embed_source(context: ContextItem):
         return {"status": "skipped", "source_id": context.source_id, "reason": "empty content"}
 
     from app.services.vector_store import embedding_cache
-    embedding_cache.get_or_embed(context.content, context.source_id)
+    # ensure_embedded: parses and embeds fresh content if source_id not found in ChromaDB
+    # We run this in a thread since it might do heavy chunking + embedding
+    import asyncio
+    await asyncio.to_thread(embedding_cache.ensure_embedded, context.content, context.source_id)
     return {"status": "cached", "source_id": context.source_id}
 
 
