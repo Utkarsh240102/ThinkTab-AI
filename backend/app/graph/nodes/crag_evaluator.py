@@ -4,6 +4,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.graph.state import GraphState
 from app.core.config import settings
+from app.services.llm_service import fast_llm
 
 
 # ─────────────────────────────────────────────────────────────
