@@ -1,5 +1,5 @@
 import React from "react";
-import ErrorBubble from "./ErrorBubble";
+
 import TypewriterMarkdown from "./TypewriterMarkdown";
 import EvidenceAccordion from "./EvidenceAccordion";
 import SoftHITLButton from "./SoftHITLButton";
@@ -11,13 +11,12 @@ interface MessageListProps {
   onRetry: () => void;
   onSwitchToDeep: () => void;
   onTypingDone: (id: string) => void;
-  bottomRef: React.RefObject<HTMLDivElement>;
+  bottomRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export default function MessageList({
   messages,
   isLoading,
-  onRetry,
   onSwitchToDeep,
   onTypingDone,
   bottomRef,
@@ -57,7 +56,7 @@ export default function MessageList({
               >
                 {msg.content}
               </div>
-            ) : (
+            ) : msg.role === "assistant" ? (
               <div
                 style={{
                   maxWidth: "92%",
@@ -135,7 +134,7 @@ export default function MessageList({
                     </div>
                   )}
               </div>
-            )}
+            ) : null}
           </div>
         );
       })}
