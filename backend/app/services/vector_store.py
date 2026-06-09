@@ -67,6 +67,7 @@ class VectorStoreFacade:
         )
         self._source_id_to_key: dict[str, str] = {}
         self._lock = threading.RLock()
+        self._in_progress: dict[str, threading.Event] = {}
 
     def _handle_eviction(self, evicted_key: str) -> None:
         with self._lock:
@@ -93,22 +94,41 @@ class VectorStoreFacade:
                 self._source_id_to_key[source_id] = key
                 return cached
 
+            # Check if another thread is already embedding this key
+            event = self._in_progress.get(key)
+            if event is None:
+                # We are the first thread! Create an event so others wait.
+                event = threading.Event()
+                self._in_progress[key] = event
+                is_first = True
+            else:
+                is_first = False
+
+        if not is_first:
+            print(f"[Cache WAIT] Another request is currently embedding hash {key[:8]}. Waiting...")
+            event.wait()
+            # The other thread finished embedding, grab it from cache!
+            with self._lock:
+                self._source_id_to_key[source_id] = key
+                return self._cache.get(key)
+
         print(f"[Cache MISS] No cached index found for hash {key[:8]}...")
         
         # Embed OUTSIDE the lock
-        print(f"[Cache SET] Embedding new content for source '{source_id}'...")
-        faiss_index = chunk_and_embed(content, source_id)
+        try:
+            print(f"[Cache SET] Embedding new content for source '{source_id}'...")
+            faiss_index = chunk_and_embed(content, source_id)
 
-        with self._lock:
-            # Check again to avoid duplicate work if another thread just embedded it
-            cached_again = self._cache.get(key)
-            if cached_again is not None:
-                return cached_again
-                
-            self._cache.set(key, faiss_index)
-            self._source_id_to_key[source_id] = key
-
-        return faiss_index
+            with self._lock:
+                self._cache.set(key, faiss_index)
+                self._source_id_to_key[source_id] = key
+                return faiss_index
+        finally:
+            # Wake up all waiting threads and cleanup
+            with self._lock:
+                if key in self._in_progress:
+                    self._in_progress[key].set()
+                    del self._in_progress[key]
 
     def delete_by_source_id(self, source_id: str) -> bool:
         with self._lock:
