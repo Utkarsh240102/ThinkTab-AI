@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import { useRef } from "react";
 import ModeSelector, { type Mode } from "./ModeSelector";
 import QueryInput from "./QueryInput";
 import type { Context } from "../hooks/useSSEChat";
@@ -27,7 +27,7 @@ interface ChatInputAreaProps {
   pdfContext: { source_id: string; content: string } | null;
   onRemovePDF: () => void;
   isPDFLoading: boolean;
-  pdfStatusText: string;
+  pdfStatusText: string | null;
   pdfError: string | null;
   clearPDFError: () => void;
   onPDFFileSelected: (file: File) => void;
