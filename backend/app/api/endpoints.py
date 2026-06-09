@@ -134,6 +134,15 @@ async def upload_pdf(file: UploadFile = File(...)):
             detail=f"File too large ({size_mb:.1f} MB). Maximum allowed size is 20 MB."
         )
 
+    # ── Guard 4: PDF Magic Signature ─────────────────────────────────────────
+    # Even if the content-type is correct, the file might be renamed or corrupted.
+    # All valid PDFs must start with the magic bytes '%PDF-'.
+    if not file_bytes.startswith(b"%PDF-"):
+        raise HTTPException(
+            status_code=415,
+            detail="The uploaded file is not a valid PDF document (missing magic signature)."
+        )
+
     # ── Extract text using PyMuPDF ───────────────────────────────────────────
     try:
         # Open the PDF from raw bytes — never writes to disk.
