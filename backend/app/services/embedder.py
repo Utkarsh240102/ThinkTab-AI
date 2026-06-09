@@ -1,6 +1,5 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
 import os
 
 # ─────────────────────────────────────────────────────────────
@@ -43,25 +42,7 @@ text_splitter = RecursiveCharacterTextSplitter(
 )
 
 
-def chunk_and_embed(content: str, source_id: str) -> FAISS:
-    """
-    Takes raw webpage/document text and converts it to a searchable FAISS index.
-
-    Args:
-        content:   The raw markdown/text content extracted from the webpage or PDF.
-        source_id: The identifier for this source (e.g. URL or filename).
-                   This is stored as metadata on each chunk so we can cite the source later.
-
-    Returns:
-        A FAISS vector store index ready for similarity search.
-    """
-    # Step 1: Split the raw text into chunks
-    chunks = text_splitter.create_documents(
-        texts=[content],
-        metadatas=[{"source": source_id}]  # Tag every chunk with its source
-    )
-
-    # Step 2: Embed all chunks and store in FAISS
-    faiss_index = FAISS.from_documents(chunks, embeddings)
-
-    return faiss_index
+# ─────────────────────────────────────────────────────────────
+# We no longer handle FAISS storage here.
+# `embeddings` and `text_splitter` are exported for vector_store.py
+# ─────────────────────────────────────────────────────────────
