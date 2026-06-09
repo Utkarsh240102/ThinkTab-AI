@@ -190,7 +190,7 @@ export default function ChatShell() {
 
       if (response?.contexts) {
         scrapedContexts = response.contexts.map((str: string) => ({
-          source_id: `Active Tab`,
+          source_id: `Active Tab: ${activeTab.title || "Unknown Page"}`,
           content: str,
         }));
       }
