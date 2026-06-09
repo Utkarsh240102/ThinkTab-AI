@@ -143,27 +143,21 @@ async def upload_pdf(file: UploadFile = File(...)):
             detail="The uploaded file is not a valid PDF document (missing magic signature)."
         )
 
-    # ── Extract text using PyMuPDF ───────────────────────────────────────────
-    try:
-        # Open the PDF from raw bytes — never writes to disk.
-        # stream= tells fitz to read from memory instead of a file path.
-        pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
-
+    # ── Extract text using PyMuPDF (Offloaded to thread) ─────────────────────
+    def _extract_pdf_text(raw_bytes: bytes) -> tuple[str, int]:
+        pdf_doc = fitz.open(stream=raw_bytes, filetype="pdf")
         page_texts = []
         for page in pdf_doc:
-            # get_text() extracts all readable text from the page.
-            # "text" mode returns a plain string (vs "dict" or "html" modes).
             page_text = page.get_text("text").strip()
             if page_text:
                 page_texts.append(page_text)
-
         page_count = len(pdf_doc)
-
-        # Always close the document to free C-level memory immediately
         pdf_doc.close()
+        return "\n\n".join(page_texts), page_count
 
-        # Join all pages with double newline (paragraph break between pages)
-        full_text = "\n\n".join(page_texts)
+    try:
+        # Run the heavy C++ extraction in a background thread so we don't block the async event loop
+        full_text, page_count = await asyncio.to_thread(_extract_pdf_text, file_bytes)
 
         print(f"[PDF Upload] Parsed '{file.filename}' — {page_count} pages, {len(full_text)} chars extracted.")
 
