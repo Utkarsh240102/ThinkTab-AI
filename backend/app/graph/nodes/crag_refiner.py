@@ -30,6 +30,23 @@ def crag_refiner(state: GraphState) -> GraphState:
     """
     query = state["query"]
     
+    # ── BUG 3 FIX: Bypass Refiner for Summary Queries ────────────────────────
+    SUMMARY_KEYWORDS = [
+        "summarize", "summarise", "summary", "overview", "explain",
+        "tell me about", "what is", "describe", "all tab", "all tabs",
+        "all the tab", "all the tabs", "compare", "brief"
+    ]
+    
+    query_lower = state.get("query", "").lower()
+    original_query_lower = state.get("original_query", "").lower()
+    
+    if any(kw in query_lower for kw in SUMMARY_KEYWORDS) or any(kw in original_query_lower for kw in SUMMARY_KEYWORDS):
+        print("[CRAG Refiner] Summary/explain intent detected. Bypassing sentence filter  keeping all content.")
+        # Join all chunk content into refined_context without filtering
+        all_content = "\n\n".join([f"--- SOURCE: {doc.metadata.get('source', 'unknown')} ---\n{doc.page_content}" for doc in state.get("good_docs", [])])
+        return {**state, "refined_context": all_content}
+    # ── End BUG 3 FIX ────────────────────────────────────────────────────────
+    
     # 1. Aggregate all available context chunks
     # IMPORTANT: use 'or []' not state.get(key, []) because if the key EXISTS
     # in the dict with value None, state.get(key, []) returns None, causing TypeError

@@ -32,6 +32,7 @@ Rules:
 - Answer 'yes' for summaries, even if they don't cover 100% of the source material. A summary of key points IS a valid summary.
 - Answer 'yes' for word-count requests (e.g. "give me 100 words") even if the count is approximate.
 - Answer 'yes' for evaluations and ratings based on provided content (e.g. "rate my resume").
+- CRITICAL SOURCE RULE: If the user's question asks about "the pinned tab", "active tab", "this page", or "the pdf", they are asking about the contents of the loaded documents, NOT asking for a definition of Chrome UI features. If the answer discusses the content of those documents, you MUST answer 'yes'.
 - Answer 'no' ONLY if the answer is completely off-topic, or refuses to answer entirely (e.g. "I cannot find this").
 - Do NOT say 'no' just because the answer could be longer or more complete."""
 
@@ -53,8 +54,9 @@ def check_usefulness(state: GraphState) -> GraphState:
         and accept the current answer, flagging it with a low confidence score.
     """
 
-    # Always use the ORIGINAL query for usefulness check (not the rewritten one)
-    original_query = state.get("original_query", state.get("query", ""))
+    # Grade against the Contextualizer's rewritten query, because it resolves pronouns and UI labels
+    # (e.g. "this tab" -> "India - Wikipedia"), making it much easier for the LLM to grade accurately.
+    query_to_grade = state.get("query", "")
     draft_answer = state.get("draft_answer", "")
     retrieval_retries = state.get("retrieval_retries", 0)
 
@@ -77,9 +79,9 @@ def check_usefulness(state: GraphState) -> GraphState:
     # ── Build the grading prompt ──────────────────────────────
     messages = [
         SystemMessage(content=USEFULNESS_SYSTEM_PROMPT),
-        HumanMessage(content=f"""USER'S ORIGINAL QUESTION:
+        HumanMessage(content=f"""USER'S QUESTION:
 ---
-{original_query}
+{query_to_grade}
 ---
 
 AI-GENERATED ANSWER:
@@ -126,17 +128,34 @@ def rewrite_question(state: GraphState) -> GraphState:
 
     original_query = state.get("original_query", state.get("query", ""))
     retrieval_retries = state.get("retrieval_retries", 0)
+    target_source_ids = state.get("target_source_ids", [])
+    contexts = state.get("contexts", [])
+    
+    # Extract source titles
+    available_sources = [ctx.get("source_id", "Unknown") for ctx in contexts]
 
     print(f"[Question Rewriter] Rephrasing query for retrieval attempt #{retrieval_retries}...")
 
     messages = [
-        SystemMessage(content="""You are a search query optimizer. 
+        SystemMessage(content=f"""You are a search query optimizer. 
 Rephrase the user's question into a different, more specific version that might find better search results.
 - Use different keywords and angles
 - Make it more specific and direct
 - Do NOT answer the question — only rephrase it
-- Return ONLY the rephrased question, nothing else."""),
+- Return ONLY the rephrased question, nothing else.
+
+CRITICAL SOURCE PRESERVATION RULE:
+The user's original query may reference UI labels like 'pinned tab', 'active tab', 'this page', 'the pdf', or 'the attached file'. These are NOT requests to define Chrome UI features  they are references to specific loaded documents.
+- If the original query contains 'pinned tab', your rewrite MUST reference the actual content of the pinned document (from the available context titles provided below), NOT define what a pinned tab is.
+- If the original query contains 'active tab' or 'this page', your rewrite MUST reference the actual content of the active page.
+- NEVER convert 'explain the pinned tab' into 'What is a pinned tab?'
+- CORRECT rewrite: 'explain me the pinned tab'  'Explain the content of [Pinned Tab document title]'
+- WRONG rewrite: 'explain me the pinned tab'  'What is a Pinned Tab in Chrome?'
+
+AVAILABLE CONTEXT TITLES:
+{available_sources}"""),
         HumanMessage(content=f"""Original question: {original_query}
+Target sources: {target_source_ids}
 
 Rephrase this question using different keywords to improve document retrieval:""")
     ]
@@ -150,6 +169,7 @@ Rephrase this question using different keywords to improve document retrieval:""
     return {
         **state,
         "query": rewritten_query,       # The graph will use this new query for re-retrieval
+        "target_source_ids": target_source_ids, # Keep filtering to the correct sources
         "revision_retries": 0,          # Reset revision counter for the new retrieval cycle
 
         # ── Clear stale data from the previous cycle ─────────────────────────

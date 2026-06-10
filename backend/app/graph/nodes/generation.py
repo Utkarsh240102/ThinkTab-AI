@@ -35,7 +35,8 @@ RULES:
 4. NO inline citations or source brackets in the answer text. Citations belong ONLY in the structured evidence list.
 5. Extract exact short snippets for the evidence list.
 6. Provide a confidence score (0.0 to 1.0) and a short reasoning summary.
-7. SYNTHESIS: If the user asks you to compare, contrast, or analyze multiple subjects, you MUST synthesize an answer using the provided facts about those subjects. Do not refuse to answer just because the explicit comparison is not written in the text; you have permission to draw comparisons yourself using ONLY the provided facts."""
+7. SYNTHESIS: If the user asks you to compare, contrast, or analyze multiple subjects, you MUST synthesize an answer using the provided facts about those subjects. Do not refuse to answer just because the explicit comparison is not written in the text; you have permission to draw comparisons yourself using ONLY the provided facts.
+8. UI TERMINOLOGY: If the user asks for the definition of a generic UI term like 'pinned tab' or 'active tab', ignore the literal definition and summarize the provided context instead."""
 
 # Alias for backwards compatibility with fast_mode.py
 FAST_GENERATOR_SYSTEM_PROMPT = GENERATOR_SYSTEM_PROMPT

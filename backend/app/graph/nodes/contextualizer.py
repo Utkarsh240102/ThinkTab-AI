@@ -1,98 +1,117 @@
+import json
+from typing import List
 from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
 from app.services.llm_service import fast_llm
 from app.graph.state import GraphState
 
 
-# ─────────────────────────────────────────────────────────────
-# System prompt for the contextualizer
-# ─────────────────────────────────────────────────────────────
-CONTEXTUALIZER_SYSTEM_PROMPT = """You are a query rewriter. Your ONLY job is to rewrite the user's latest question into a fully standalone question.
+class QueryAnalysis(BaseModel):
+    standalone_query: str = Field(description="The rewritten standalone query with generic UI terms replaced by their concrete topics.")
+    target_source_ids: List[str] = Field(description="An exact list of source_ids the user is referring to. If the user is asking a general question or wants to search everything, return an empty list.")
 
-Rules:
-- Resolve ALL pronouns and references using the conversation history (e.g. "it", "that", "the second one", "them")
-- CRITICAL: Aggressively substitute vague nouns like "the two webpages", "both documents", or "the tab" with their actual concrete topics from the conversation history (e.g. "the Animal webpage and the India webpage").
-- Do NOT add new information or assumptions
-- Do NOT answer the question — only rewrite it
-- If the question is already standalone and clear, return it exactly as-is
-- Return ONLY the rewritten question, nothing else. No explanations, no preamble."""
 
+# ─────────────────────────────────────────────────────────────
+# System prompt for the Structured AI Router
+# ─────────────────────────────────────────────────────────────
+CONTEXTUALIZER_SYSTEM_PROMPT = """You are a Structured AI Router. Your job is to rewrite the user's latest question into a fully standalone question AND determine exactly which document sources the user wants to search.
+
+Rules for standalone_query:
+- Resolve ALL pronouns and references using the conversation history (e.g. "it", "that", "the second one", "them").
+- CRITICAL: Aggressively substitute vague nouns like "the two webpages", "both documents", "the pinned tab", or "the active tab" with their actual concrete topics based on the conversation history or the provided context sources.
+- Do NOT answer the question — only rewrite it.
+- Do NOT add new information or assumptions.
+- If the question is already standalone and clear, return it exactly as-is.
+
+Rules for target_source_ids:
+- Look at the AVAILABLE CONTEXT SOURCES. If the user's query refers to specific UI elements (e.g., "pinned tab", "this page", "the pdf"), you MUST output the exact string `source_id` for those documents.
+- If the user asks to compare things, output the `source_id`s for all relevant documents.
+- If the user asks a general question and does not specify a source, return an empty list `[]`.
+"""
 
 def contextualize_query(state: GraphState) -> GraphState:
     """
-    LangGraph Node: Query Contextualizer
-
-    Rewrites vague follow-up questions into standalone questions
-    using the conversation history.
-
-    Examples:
-        "explain the second one more" → "Can you explain the second pricing tier of Stripe in more detail?"
-        "why is it faster?"           → "Why is Stripe's payment processing faster than PayPal's?"
-        "What is Stripe?"             → "What is Stripe?" (already standalone, returned as-is)
-
-    Skips the LLM call entirely if there is no chat history (first message).
+    LangGraph Node: Structured Query Contextualizer & Router
     """
 
     query = state["query"]
     chat_history = state.get("chat_history") or []
+    contexts = state.get("contexts", [])
 
-    # ── Skip if this is the first message (no history to resolve) ──
-    if not chat_history:
-        print("[Contextualizer] No chat history — using query as-is.")
+    # ── BUG 1 FIX: Deterministic Universal Scope Guard ────────────────────────
+    _query_lower = query.lower()
+    
+    TABS_SIGNALS = ["all tabs", "all the tab", "both tabs", "every tab", "all of the tabs", "all the tabs"]
+    EVERYTHING_SIGNALS = ["all pages", "all documents", "all files", "everything"]
+    
+    is_tabs_only = any(signal in _query_lower for signal in TABS_SIGNALS)
+    is_everything = any(signal in _query_lower for signal in EVERYTHING_SIGNALS)
+    
+    if is_everything:
+        print(f"[Contextualizer] Universal 'everything' intent detected. Returning ALL available sources.")
+        all_sources = [ctx.get("source_id", "Unknown") for ctx in contexts]
         return {
             **state,
-            "original_query": query,  # Preserve the raw query
-            "query": query,           # No change needed
+            "original_query": query,
+            "query": "Please summarize all the available context documents.",
+            "target_source_ids": all_sources
         }
+    elif is_tabs_only:
+        print(f"[Contextualizer] 'All tabs' intent detected. Returning ONLY browser tab sources.")
+        # Filter for sources that start with "Active Tab" or "Pinned Tab"
+        tab_sources = [ctx.get("source_id", "Unknown") for ctx in contexts 
+                       if str(ctx.get("source_id", "")).startswith("Active Tab") 
+                       or str(ctx.get("source_id", "")).startswith("Pinned Tab")]
+        return {
+            **state,
+            "original_query": query,
+            "query": "Please summarize all the open browser tabs.",
+            "target_source_ids": tab_sources
+        }
+    # ── End BUG 1 FIX ─────────────────────────────────────────────────────────
 
-    # ── Build the last 4 messages of history as a readable string ──
-    # We only use the last 4 to keep the prompt short and cheap
+    available_sources = [ctx.get("source_id", "Unknown") for ctx in contexts]
+    source_mapping_text = f"\n\nAVAILABLE CONTEXT SOURCES:\n{json.dumps(available_sources, indent=2)}\n"
+
+    # Build the last 4 messages of history as a readable string
     recent_history = chat_history[-4:]
     history_text = "\n".join([
         f"{msg.get('role', 'user').capitalize()}: {msg.get('content', '')}"
         for msg in recent_history
-        if msg.get("content")   # skip empty messages
+        if msg.get("content")
     ])
 
-    print(f"[Contextualizer] Resolving references in: '{query}'")
-
     summary_text = (
-        f"\n\n[Previous Conversation Summary]: "
-        f"{state['history_summary']}\n\n"
+        f"\n\n[Previous Conversation Summary]: {state['history_summary']}\n\n"
         if state.get("history_summary")
         else ""
     )
 
-    contexts = state.get("contexts", [])
-    source_names = list(set([ctx.get("source_id", "Unknown") for ctx in contexts]))
-    sources_str = "\n".join([f"- {s}" for s in source_names]) if source_names else "None"
-    
-    source_mapping_text = f"""
-AVAILABLE CONTEXT SOURCES IN THIS SESSION:
-{sources_str}
-
-CRITICAL MAPPING RULE: If the user's query contains UI terminology like "the pinned tab", "the active tab", "this page", or "the pdf", you MUST replace those generic terms with the exact matching source name from the list above! Do NOT just leave it as "the pinned tab".
-Example: "explain me the pinned tab" -> "Explain Pinned Tab: Animal - Wikipedia"
-"""
-
     system_prompt = CONTEXTUALIZER_SYSTEM_PROMPT + summary_text + source_mapping_text
 
-    # ── Call gpt-4o-mini to rewrite the query ──
+    print(f"[Contextualizer] Analyzing intent for: '{query}'")
+
     messages = [
         SystemMessage(content=system_prompt),
-        HumanMessage(content=f"""Conversation history:
-{history_text}
-
-Latest question to rewrite:
-{query}""")
+        HumanMessage(content=f"Conversation history:\n{history_text}\n\nLatest question:\n{query}")
     ]
 
-    response = fast_llm.invoke(messages)
-    rewritten_query = str(response.content).strip()
+    structured_llm = fast_llm.with_structured_output(QueryAnalysis)
+    try:
+        result: QueryAnalysis = structured_llm.invoke(messages)
+        rewritten_query = result.standalone_query.strip()
+        target_sources = result.target_source_ids
+    except Exception as e:
+        print(f"[Contextualizer] Structured parsing failed: {e}. Falling back to defaults.")
+        rewritten_query = query
+        target_sources = []
 
-    print(f"[Contextualizer] Rewritten: '{rewritten_query}'")
+    print(f"[Contextualizer] Rewritten query: '{rewritten_query}'")
+    print(f"[Contextualizer] Target sources: {target_sources}")
 
     return {
         **state,
-        "original_query": query,          # Always keep the raw user query
-        "query": rewritten_query,          # Replace with the standalone version
+        "original_query": query,
+        "query": rewritten_query,
+        "target_source_ids": target_sources
     }

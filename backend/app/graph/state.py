@@ -19,6 +19,9 @@ class GraphState(TypedDict):
 
     original_query: str
     # The raw query exactly as the user typed it — preserved for reference
+    
+    target_source_ids: List[str]
+    # The exact list of source_ids the user is referring to (extracted by Structured Contextualizer)
 
     mode: Literal["fast", "deep", "auto"]
     # The mode the user selected in the Chrome Extension
