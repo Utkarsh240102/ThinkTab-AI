@@ -127,17 +127,31 @@ def rewrite_question(state: GraphState) -> GraphState:
     original_query = state.get("original_query", state.get("query", ""))
     retrieval_retries = state.get("retrieval_retries", 0)
     target_source_ids = state.get("target_source_ids", [])
+    contexts = state.get("contexts", [])
+    
+    # Extract source titles
+    available_sources = [ctx.get("source_id", "Unknown") for ctx in contexts]
 
     print(f"[Question Rewriter] Rephrasing query for retrieval attempt #{retrieval_retries}...")
 
     messages = [
-        SystemMessage(content="""You are a search query optimizer. 
+        SystemMessage(content=f"""You are a search query optimizer. 
 Rephrase the user's question into a different, more specific version that might find better search results.
 - Use different keywords and angles
 - Make it more specific and direct
 - Do NOT answer the question — only rephrase it
 - Return ONLY the rephrased question, nothing else.
-- You MUST preserve all source references in the rewritten query. If the original query mentioned 'pinned tab', 'active tab', 'the pdf', or any specific document, the rewritten query MUST still reference the same source. Never convert UI source terms into generic factual questions."""),
+
+CRITICAL SOURCE PRESERVATION RULE:
+The user's original query may reference UI labels like 'pinned tab', 'active tab', 'this page', 'the pdf', or 'the attached file'. These are NOT requests to define Chrome UI features  they are references to specific loaded documents.
+- If the original query contains 'pinned tab', your rewrite MUST reference the actual content of the pinned document (from the available context titles provided below), NOT define what a pinned tab is.
+- If the original query contains 'active tab' or 'this page', your rewrite MUST reference the actual content of the active page.
+- NEVER convert 'explain the pinned tab' into 'What is a pinned tab?'
+- CORRECT rewrite: 'explain me the pinned tab'  'Explain the content of [Pinned Tab document title]'
+- WRONG rewrite: 'explain me the pinned tab'  'What is a Pinned Tab in Chrome?'
+
+AVAILABLE CONTEXT TITLES:
+{available_sources}"""),
         HumanMessage(content=f"""Original question: {original_query}
 Target sources: {target_source_ids}
 
