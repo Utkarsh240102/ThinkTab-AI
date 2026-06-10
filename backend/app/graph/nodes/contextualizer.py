@@ -58,30 +58,8 @@ def contextualize_query(state: GraphState) -> GraphState:
         }
     # ── End BUG 1 FIX ─────────────────────────────────────────────────────────
 
-    # Format the sources cleanly into categories
-    active_tabs = []
-    pinned_tabs = []
-    pdfs = []
-    
-    for ctx in contexts:
-        s_id = ctx.get("source_id", "Unknown")
-        if s_id.lower().endswith('.pdf'):
-            pdfs.append(s_id)
-        elif s_id.startswith("Active Tab"):
-            active_tabs.append(s_id)
-        elif s_id.startswith("Pinned Tab"):
-            pinned_tabs.append(s_id)
-        else:
-            # Fallback
-            active_tabs.append(s_id)
-            
-    sources_formatted = {
-        "Active Tab": active_tabs,
-        "Pinned Tabs": pinned_tabs,
-        "PDFs": pdfs
-    }
-
-    source_mapping_text = f"\n\nAVAILABLE CONTEXT SOURCES:\n{json.dumps(sources_formatted, indent=2)}\n"
+    available_sources = [ctx.get("source_id", "Unknown") for ctx in contexts]
+    source_mapping_text = f"\n\nAVAILABLE CONTEXT SOURCES:\n{json.dumps(available_sources, indent=2)}\n"
 
     # Build the last 4 messages of history as a readable string
     recent_history = chat_history[-4:]
