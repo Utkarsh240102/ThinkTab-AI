@@ -33,6 +33,19 @@ def batch_crag_filter(state: GraphState) -> GraphState:
         print("[Fast CRAG] No docs to filter.")
         return {**state, "good_docs": []}
 
+    SUMMARY_KEYWORDS = [
+        "summarize", "summarise", "summary", "overview", "explain",
+        "tell me about", "what is", "describe", "all tab", "all tabs",
+        "all the tab", "all the tabs", "compare", "brief"
+    ]
+    
+    query_lower = state.get("query", "").lower()
+    original_query_lower = state.get("original_query", "").lower()
+    
+    if any(kw in query_lower for kw in SUMMARY_KEYWORDS) or any(kw in original_query_lower for kw in SUMMARY_KEYWORDS):
+        print("[Fast CRAG] Summary/explain intent detected. Bypassing Fast CRAG filter.")
+        return {**state, "good_docs": docs}
+
     print(f"[Fast CRAG] Filtering {len(docs)} chunks...")
     
     paragraphs_text = ""

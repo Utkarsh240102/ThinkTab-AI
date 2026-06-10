@@ -39,22 +39,17 @@ def contextualize_query(state: GraphState) -> GraphState:
     contexts = state.get("contexts", [])
 
     # ── BUG 1 FIX: Deterministic Universal Scope Guard ────────────────────────
-    ALL_SIGNALS = [
-        "all tab", "all tabs", "all the tab", "all the tabs",
-        "every tab", "each tab", "all of them", "all sources",
-        "all documents", "all pages", "explain all", "summarize all"
-    ]
-    
     _query_lower = query.lower()
-    _last_msg = chat_history[-1].get("content", "").lower() if chat_history else ""
-    
-    if any(sig in _query_lower or sig in _last_msg for sig in ALL_SIGNALS):
-        print(f"[Contextualizer] 'All Tabs' universal scope detected deterministically. Bypassing LLM.")
+    ALL_SIGNALS = ["all tabs", "all the tab", "all pages", "all documents", "both tabs", "every tab", "all files"]
+    is_all = any(signal in _query_lower for signal in ALL_SIGNALS)
+    if is_all:
+        print(f"[Contextualizer] Universal 'all' intent detected. Returning ALL available sources.")
+        all_sources = [ctx.get("source_id", "Unknown") for ctx in contexts]
         return {
             **state,
             "original_query": query,
-            "query": query, # leave unchanged
-            "target_source_ids": [ctx.get("source_id") for ctx in contexts]
+            "query": "Please summarize all the available context documents.",
+            "target_source_ids": all_sources
         }
     # ── End BUG 1 FIX ─────────────────────────────────────────────────────────
 
