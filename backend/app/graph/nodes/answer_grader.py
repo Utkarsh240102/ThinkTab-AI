@@ -54,8 +54,9 @@ def check_usefulness(state: GraphState) -> GraphState:
         and accept the current answer, flagging it with a low confidence score.
     """
 
-    # Always use the ORIGINAL query for usefulness check (not the rewritten one)
-    original_query = state.get("original_query", state.get("query", ""))
+    # Grade against the Contextualizer's rewritten query, because it resolves pronouns and UI labels
+    # (e.g. "this tab" -> "India - Wikipedia"), making it much easier for the LLM to grade accurately.
+    query_to_grade = state.get("query", "")
     draft_answer = state.get("draft_answer", "")
     retrieval_retries = state.get("retrieval_retries", 0)
 
@@ -78,9 +79,9 @@ def check_usefulness(state: GraphState) -> GraphState:
     # ── Build the grading prompt ──────────────────────────────
     messages = [
         SystemMessage(content=USEFULNESS_SYSTEM_PROMPT),
-        HumanMessage(content=f"""USER'S ORIGINAL QUESTION:
+        HumanMessage(content=f"""USER'S QUESTION:
 ---
-{original_query}
+{query_to_grade}
 ---
 
 AI-GENERATED ANSWER:
