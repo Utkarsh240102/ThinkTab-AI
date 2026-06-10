@@ -32,6 +32,7 @@ Rules:
 - Answer 'yes' for summaries, even if they don't cover 100% of the source material. A summary of key points IS a valid summary.
 - Answer 'yes' for word-count requests (e.g. "give me 100 words") even if the count is approximate.
 - Answer 'yes' for evaluations and ratings based on provided content (e.g. "rate my resume").
+- CRITICAL SOURCE RULE: If the user's question asks about "the pinned tab", "active tab", "this page", or "the pdf", they are asking about the contents of the loaded documents, NOT asking for a definition of Chrome UI features. If the answer discusses the content of those documents, you MUST answer 'yes'.
 - Answer 'no' ONLY if the answer is completely off-topic, or refuses to answer entirely (e.g. "I cannot find this").
 - Do NOT say 'no' just because the answer could be longer or more complete."""
 
