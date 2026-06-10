@@ -301,7 +301,10 @@ export default function ChatShell() {
     // can start before the old reader releases the connection, causing
     // interleaved SSE events and duplicate assistant messages in the UI.
     await new Promise(r => setTimeout(r, 100));
-    setSelectedMode("deep");
+    // NOTE: We intentionally do NOT call setSelectedMode("deep") here.
+    // The sendQuery below already sends "deep" directly to the backend.
+    // Changing the dropdown would make ALL future queries use Deep Mode,
+    // but the user only wants this one re-run to be in Deep Mode.
     // BUG-002 FIX: Re-scrape the active tab so Deep Mode has real page content.
     const scrapedContexts = await scrapeActiveTab();
     const allContexts = [...scrapedContexts];
