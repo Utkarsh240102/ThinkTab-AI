@@ -56,80 +56,15 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
 
     all_docs: list[Document] = []
 
-    # ── BUG2-003 FIX: Source-intent filtering ────────────────────────────────
-    # When a user explicitly names a source ("summarize the web page", "read
-    # the PDF"), restricting retrieval to only that source prevents the
-    # re-ranker from pulling chunks from the wrong place.
+    # ── BUG2-003 FIX: Structured Source-Intent Filtering ───────────────────────
+    # The Contextualizer now explicitly determines which sources the user 
+    # wants to search and populates state["target_source_ids"].
+    target_source_ids = state.get("target_source_ids", [])
     
-    _BOTH_SIGNALS = [
-        "both webpages", "both pages", "both tab", "both tabs",
-        "all pages", "all tabs", "all tab", "all the tab", "all the tabs",
-        "every tab", "every page",
-    ]
-    _ACTIVE_SIGNALS = ["this page", "current page", "active tab", "current tab", "this webpage", "current webpage", "the website", "the webpage", "the page"]
-    _PINNED_SIGNALS = ["pinned", "pinned tab", "pinned page", "other tab", "background tab"]
-    _PDF_SIGNALS = ["pdf", "document", "the file", "the resume", "uploaded file", "attached file"]
-
-    # ── CRITICAL: Check BOTH the rewritten query AND the original user query ──
-    # The Contextualizer rewrites "explain me the pinned tab" → "Explain Pinned Tab: Animal"
-    # which strips away keywords like "pinned tab" that the source filter needs.
-    # By checking the original_query too, we never lose the user's intent signals.
-    original_query = state.get("original_query", "")
-    _query_lower = query.lower()
-    _orig_lower = original_query.lower() if original_query else ""
-
-    def _has_signal(signals: list[str]) -> bool:
-        return any(kw in _query_lower for kw in signals) or any(kw in _orig_lower for kw in signals)
-
-    has_active = _has_signal(_ACTIVE_SIGNALS)
-    has_pinned = _has_signal(_PINNED_SIGNALS)
-    has_pdf = _has_signal(_PDF_SIGNALS)
-    has_both = _has_signal(_BOTH_SIGNALS)
-
-    # Dynamically check if the query mentions specific tab titles (e.g. "india" or "animal")
-    for ctx in contexts:
-        s_id_lower = ctx.get("source_id", "").lower()
-        # Extract title: "Pinned Tab: India - Wikipedia" -> "india - wikipedia"
-        title = s_id_lower.split(":", 1)[-1].strip()
-        # Also get the short title before the dash: "india - wikipedia" -> "india"
-        short_title = title.split(" - ")[0].strip() if " - " in title else title
-        
-        # Check both rewritten and original query for title mentions
-        mentioned = False
-        if short_title and len(short_title) > 2:  # avoid matching tiny strings
-            mentioned = (short_title in _query_lower) or (short_title in _orig_lower)
-        if not mentioned and title and len(title) > 2:
-            mentioned = (title in _query_lower) or (title in _orig_lower)
-        
-        if mentioned:
-            if s_id_lower.startswith("active"):
-                has_active = True
-            elif s_id_lower.startswith("pinned"):
-                has_pinned = True
-            elif s_id_lower.endswith(".pdf"):
-                has_pdf = True
-
-    # If query explicitly asks to "compare" and we have multiple context sources,
-    # treat it as a multi-source query so nothing gets filtered out.
-    _COMPARE_SIGNALS = ["compare", "relation between", "difference between", "similarities between"]
-    if _has_signal(_COMPARE_SIGNALS) and len(contexts) > 1:
-        has_both = True
-
-    if has_both or sum([has_active, has_pinned, has_pdf]) > 1:
-        source_filter = None
-        print("[Retrieval] Source intent: BOTH/MULTIPLE sources detected -> searching all sources")
-    elif has_active:
-        source_filter = "active"
-        print("[Retrieval] Source intent: ACTIVE TAB only")
-    elif has_pinned:
-        source_filter = "pinned"
-        print("[Retrieval] Source intent: PINNED TAB only")
-    elif has_pdf:
-        source_filter = "pdf"
-        print("[Retrieval] Source intent: PDF only")
+    if not target_source_ids:
+        print("[Retrieval] Target source list is empty. Searching all available sources.")
     else:
-        source_filter = None
-        print("[Retrieval] Source intent: all sources")
+        print(f"[Retrieval] Deterministic routing to {len(target_source_ids)} specific sources.")
     # ── End BUG2-003 FIX ─────────────────────────────────────────────────────
 
     # Step 1: Retrieve top K chunks from each source
@@ -137,22 +72,13 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         source_id = ctx["source_id"]
         content = ctx["content"]
 
-        # ── Source-intent gate ────────────────────────────────────────────────
-        # Skip this context if it doesn't match the source the user asked about.
-        is_pdf = source_id.lower().endswith('.pdf')
-        is_active = source_id.startswith("Active Tab")
-        is_pinned = source_id.startswith("Pinned Tab")
-
-        if source_filter == "active" and not is_active:
-            print(f"[Retrieval] Skipping '{source_id}' (active-only intent)")
+        # ── Deterministic source-intent gate ───────────────────────────────────
+        # Skip this context if target_source_ids is not empty AND this source
+        # is NOT in the target list.
+        if target_source_ids and source_id not in target_source_ids:
+            print(f"[Retrieval] Skipping '{source_id}' (not in target_source_ids)")
             continue
-        if source_filter == "pinned" and not is_pinned:
-            print(f"[Retrieval] Skipping '{source_id}' (pinned-only intent)")
-            continue
-        if source_filter == "pdf" and not is_pdf:
-            print(f"[Retrieval] Skipping '{source_id}' (pdf-only intent)")
-            continue
-        # ── End source-intent gate ────────────────────────────────────────────
+        # ── End deterministic source-intent gate ───────────────────────────────
 
         # Guard: skip empty or whitespace-only content — FAISS.from_documents
         # crashes with IndexError when there are no chunks to embed
