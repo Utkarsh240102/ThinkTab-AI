@@ -40,16 +40,33 @@ def contextualize_query(state: GraphState) -> GraphState:
 
     # ── BUG 1 FIX: Deterministic Universal Scope Guard ────────────────────────
     _query_lower = query.lower()
-    ALL_SIGNALS = ["all tabs", "all the tab", "all pages", "all documents", "both tabs", "every tab", "all files"]
-    is_all = any(signal in _query_lower for signal in ALL_SIGNALS)
-    if is_all:
-        print(f"[Contextualizer] Universal 'all' intent detected. Returning ALL available sources.")
+    
+    TABS_SIGNALS = ["all tabs", "all the tab", "both tabs", "every tab", "all of the tabs", "all the tabs"]
+    EVERYTHING_SIGNALS = ["all pages", "all documents", "all files", "everything"]
+    
+    is_tabs_only = any(signal in _query_lower for signal in TABS_SIGNALS)
+    is_everything = any(signal in _query_lower for signal in EVERYTHING_SIGNALS)
+    
+    if is_everything:
+        print(f"[Contextualizer] Universal 'everything' intent detected. Returning ALL available sources.")
         all_sources = [ctx.get("source_id", "Unknown") for ctx in contexts]
         return {
             **state,
             "original_query": query,
             "query": "Please summarize all the available context documents.",
             "target_source_ids": all_sources
+        }
+    elif is_tabs_only:
+        print(f"[Contextualizer] 'All tabs' intent detected. Returning ONLY browser tab sources.")
+        # Filter for sources that start with "Active Tab" or "Pinned Tab"
+        tab_sources = [ctx.get("source_id", "Unknown") for ctx in contexts 
+                       if str(ctx.get("source_id", "")).startswith("Active Tab") 
+                       or str(ctx.get("source_id", "")).startswith("Pinned Tab")]
+        return {
+            **state,
+            "original_query": query,
+            "query": "Please summarize all the open browser tabs.",
+            "target_source_ids": tab_sources
         }
     # ── End BUG 1 FIX ─────────────────────────────────────────────────────────
 
