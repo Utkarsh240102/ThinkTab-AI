@@ -73,9 +73,20 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         content = ctx["content"]
 
         # ── Deterministic source-intent gate ───────────────────────────────────
-        # Skip this context if target_source_ids is not empty AND this source
-        # is NOT in the target list.
-        if target_source_ids and source_id not in target_source_ids:
+        # IMPORTANT: Use flexible matching, NOT exact equality.
+        # The Contextualizer returns short labels like "Active Tab" or "Pinned Tab"
+        # but source_ids in the DB are full strings like "Active Tab: United States - Wikipedia".
+        # We match if any target is a prefix of the source_id OR the source_id starts with any target.
+        def _is_targeted(sid: str, targets: list[str]) -> bool:
+            sid_lower = sid.lower()
+            for t in targets:
+                t_lower = t.lower()
+                # Exact match OR prefix match in either direction
+                if t_lower == sid_lower or sid_lower.startswith(t_lower) or t_lower.startswith(sid_lower):
+                    return True
+            return False
+
+        if target_source_ids and not _is_targeted(source_id, target_source_ids):
             print(f"[Retrieval] Skipping '{source_id}' (not in target_source_ids)")
             continue
         # ── End deterministic source-intent gate ───────────────────────────────
