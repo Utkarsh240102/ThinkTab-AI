@@ -126,6 +126,7 @@ def rewrite_question(state: GraphState) -> GraphState:
 
     original_query = state.get("original_query", state.get("query", ""))
     retrieval_retries = state.get("retrieval_retries", 0)
+    target_source_ids = state.get("target_source_ids", [])
 
     print(f"[Question Rewriter] Rephrasing query for retrieval attempt #{retrieval_retries}...")
 
@@ -135,8 +136,10 @@ Rephrase the user's question into a different, more specific version that might 
 - Use different keywords and angles
 - Make it more specific and direct
 - Do NOT answer the question — only rephrase it
-- Return ONLY the rephrased question, nothing else."""),
+- Return ONLY the rephrased question, nothing else.
+- You MUST preserve all source references in the rewritten query. If the original query mentioned 'pinned tab', 'active tab', 'the pdf', or any specific document, the rewritten query MUST still reference the same source. Never convert UI source terms into generic factual questions."""),
         HumanMessage(content=f"""Original question: {original_query}
+Target sources: {target_source_ids}
 
 Rephrase this question using different keywords to improve document retrieval:""")
     ]
@@ -150,6 +153,7 @@ Rephrase this question using different keywords to improve document retrieval:""
     return {
         **state,
         "query": rewritten_query,       # The graph will use this new query for re-retrieval
+        "target_source_ids": target_source_ids, # Keep filtering to the correct sources
         "revision_retries": 0,          # Reset revision counter for the new retrieval cycle
 
         # ── Clear stale data from the previous cycle ─────────────────────────
