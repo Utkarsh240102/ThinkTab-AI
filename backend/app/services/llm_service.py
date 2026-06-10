@@ -20,9 +20,19 @@ fast_llm = ChatOpenAI(
 # Used for: final answer generation, draft writing,
 #           answer revision, direct question answering
 # ─────────────────────────────────────────────────────────────
-smart_llm = ChatGroq(
+smart_llm_primary = ChatGroq(
     model=settings.GROQ_MODEL,                 # "meta-llama/llama-3.3-70b-versatile"
     api_key=settings.GROQ_API_KEY,
     temperature=0.2,                           # Slight creativity for fluent answers
     max_tokens=2048,                           # Enough for detailed structured answers
 )
+
+smart_llm_fallback = ChatOpenAI(
+    model=settings.OPENROUTER_MODEL,           # "openai/gpt-4o-mini"
+    openai_api_key=settings.OPENROUTER_API_KEY,
+    openai_api_base="https://openrouter.ai/api/v1",
+    temperature=0.2,                           # Match smart_llm temperature
+    max_tokens=2048,                           # Enough for detailed structured answers
+)
+
+smart_llm = smart_llm_primary.with_fallbacks([smart_llm_fallback])
