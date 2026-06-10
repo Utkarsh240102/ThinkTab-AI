@@ -60,6 +60,20 @@ def route_query(state: GraphState) -> Literal["chat", "fast", "deep"]:
     """
     query = state["query"].lower().strip()
 
+    # ── BUG 2 FIX: Document-Reference Guard ─────────────────────────────
+    DOCUMENT_SIGNALS = [
+        "this tab", "the tab", "all tab", "all tabs", "all the tab",
+        "pinned tab", "active tab", "current tab", "the pdf",
+        "attached file", "the file", "uploaded file", "the document",
+        "the page", "this page", "the webpage", "the website"
+    ]
+
+    query_lower = state["query"].lower()
+    if any(signal in query_lower for signal in DOCUMENT_SIGNALS):
+        print("[Auto Router] Document-reference signal detected. Short-circuiting to FAST.")
+        return "fast"
+    # ── End BUG 2 FIX ───────────────────────────────────────────────────
+
     # ── Tier 1: Keyword Rule Check (0ms) ────────────────────────────────
     # Explicit deep-reasoning keywords → skip to Deep Mode immediately
     if any(keyword in query for keyword in DEEP_MODE_SIGNALS):
