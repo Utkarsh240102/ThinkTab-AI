@@ -46,6 +46,8 @@ export default function ChatShell() {
   const [pinnedContexts, setPinnedContexts] = useState<Context[]>([]);
   const bottomRef  = useRef<HTMLDivElement>(null);
   const embedReadyRef = useRef<boolean>(false);
+  const isSummarizingRef = useRef<boolean>(false);
+  const lastSummarizedLengthRef = useRef<number>(0);
 
   /* PDF context: null = no PDF loaded, object = a PDF is attached */
   const [pdfContext, setPdfContext] = useState<{ source_id: string; content: string } | null>(null);
@@ -101,7 +103,11 @@ export default function ChatShell() {
   // PipelineStatus now handles the error bubble directly to eliminate cascading re-renders!
 
   useEffect(() => {
-    if (chatHistory.length > 10) {
+    // Fire only if length is at least 10 greater than the last time we summarized
+    if (chatHistory.length >= lastSummarizedLengthRef.current + 10) {
+      if (isSummarizingRef.current) return;
+
+      isSummarizingRef.current = true;
       const messagesToDrop = chatHistory.slice(
         0,
         chatHistory.length - 10
@@ -121,6 +127,7 @@ export default function ChatShell() {
         .then((data) => {
           if (data.summary) {
             setHistorySummary(data.summary);
+            lastSummarizedLengthRef.current = chatHistory.length;
           }
         })
         .catch((err) =>
@@ -128,9 +135,12 @@ export default function ChatShell() {
             "Background summarization failed:",
             err
           )
-        );
+        )
+        .finally(() => {
+          isSummarizingRef.current = false;
+        });
     }
-  }, [chatHistory, historySummary]);
+  }, [chatHistory]); // NOTE: historySummary removed from dependencies to prevent infinite loop!
 
   /* Auto-scroll to bottom on new messages or status */
   useEffect(() => {
