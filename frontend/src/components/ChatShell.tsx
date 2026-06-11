@@ -48,6 +48,7 @@ export default function ChatShell() {
   const embedReadyRef = useRef<boolean>(false);
   const isSummarizingRef = useRef<boolean>(false);
   const lastSummarizedLengthRef = useRef<number>(0);
+  const BACKEND_URL = "http://localhost:8000";
 
   /* PDF context: null = no PDF loaded, object = a PDF is attached */
   const [pdfContext, setPdfContext] = useState<{ source_id: string; content: string } | null>(null);
@@ -149,7 +150,6 @@ export default function ChatShell() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, statusText, error]);
 
-  const BACKEND_URL = "http://localhost:8000";
 
   /* ── Reusable Tab Scraper ── */
   async function scrapeActiveTab(): Promise<Context[]> {
