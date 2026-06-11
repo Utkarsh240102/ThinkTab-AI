@@ -55,6 +55,7 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         rerank_top_k = settings.FAST_MODE_RERANK_TOP_K
 
     all_docs: list[Document] = []
+    source_chunks: dict[str, list[tuple[float, Document]]] = {}
 
     # ── BUG2-003 FIX: Structured Source-Intent Filtering ───────────────────────
     # The Contextualizer now explicitly determines which sources the user 
@@ -102,15 +103,39 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         # ensure_embedded: parses and embeds fresh content if source_id not found in ChromaDB
         await asyncio.to_thread(embedding_cache.ensure_embedded, content, source_id)
 
-        raw_docs = await asyncio.to_thread(
-            embedding_cache.search,
+        raw_scored_docs = await asyncio.to_thread(
+            embedding_cache.vector_store.similarity_search_with_score,
             query,
-            source_id,
-            retrieve_k
+            k=retrieve_k,
+            filter={"source": source_id}
         )
 
-        print(f"[Retrieval] Retrieved {len(raw_docs)} raw chunks from {source_id}")
-        all_docs.extend(raw_docs)
+        print(f"[Retrieval] Retrieved {len(raw_scored_docs)} raw chunks from {source_id}")
+        source_chunks[source_id] = [(score, doc) for doc, score in raw_scored_docs]
+
+    # Step 2: Normalize the scores for each source independently
+    for sid, chunks in source_chunks.items():
+        if not chunks:
+            continue
+        scores = [score for score, _ in chunks]
+        min_score = min(scores)
+        max_score = max(scores)
+        
+        normalized_chunks = []
+        for score, doc in chunks:
+            if max_score == min_score:
+                norm_score = 1.0
+            else:
+                norm_score = (score - min_score) / (max_score - min_score)
+            normalized_chunks.append((norm_score, doc))
+        source_chunks[sid] = normalized_chunks
+
+    # Step 3: Flatten all (normalized_score, doc) tuples into a single merged list called all_chunks
+    all_chunks = []
+    for chunks in source_chunks.values():
+        all_chunks.extend(chunks)
+        
+    all_docs = [doc for _, doc in all_chunks]
 
     # Guard: If no docs retrieved at all, return a fallback document
     if not all_docs:
