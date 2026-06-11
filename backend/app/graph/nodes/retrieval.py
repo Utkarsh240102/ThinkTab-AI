@@ -116,10 +116,17 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
             source_chunks[source_id] = []
             continue
             
-        tokenized_corpus = [doc.page_content.lower().split() for doc, _ in raw_scored_docs]
-        bm25 = BM25Okapi(tokenized_corpus)
-        tokenized_query = query.lower().split()
-        bm25_scores = bm25.get_scores(tokenized_query)
+        MIN_BM25_LENGTH = 100
+        bm25_eligible = [(i, doc) for i, (doc, _) in enumerate(raw_scored_docs) if len(doc.page_content) >= MIN_BM25_LENGTH]
+        
+        bm25_scores = [0.0] * len(raw_scored_docs)
+        if bm25_eligible:
+            tokenized_corpus = [doc.page_content.lower().split() for _, doc in bm25_eligible]
+            bm25 = BM25Okapi(tokenized_corpus)
+            tokenized_query = query.lower().split()
+            valid_scores = bm25.get_scores(tokenized_query)
+            for idx_in_valid, (orig_idx, _) in enumerate(bm25_eligible):
+                bm25_scores[orig_idx] = valid_scores[idx_in_valid]
         
         source_chunks[source_id] = [
             (semantic_score, bm25_scores[i], doc) 
