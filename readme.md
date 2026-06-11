@@ -12,6 +12,7 @@ ThinkTab AI is a powerful, contextual AI research assistant packaged as a Google
 - **Dynamic PDF Attachment Support:** Upload a local PDF file, and ThinkTab will extract the text entirely on the client side (using `pdfjs-dist`) and inject it into your context window alongside your web pages. 
 - **Intelligent UI Label Resolution:** ThinkTab understands that when you type "this tab", "the pdf", or "the pinned tab", you are referring to a specific loaded document. It uses a structured LLM router to map these UI terms to the exact document IDs deterministically, preventing confusing general knowledge hallucinations.
 - **Soft Human-in-the-Loop (HITL):** Need a quick answer? Use Fast Mode. If the answer isn't detailed enough, you can seamlessly escalate to Deep Mode with a single click, allowing the AI to re-read the context and perform rigorous self-evaluation.
+- **Hybrid Retrieval & Score Normalization:** ThinkTab uses a dual-engine search (ChromaDB Semantic + rank-bm25 Keyword) merged via Reciprocal Rank Fusion (RRF). FAISS scores are normalized per-source on a `0.0-1.0` scale, completely eliminating the "Active Tab Dominance" bias and ensuring fair, accurate cross-document synthesis.
 
 ---
 
