@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from app.services.vector_store import embedding_cache
 from app.graph.state import GraphState
 from app.core.config import settings
+from rank_bm25 import BM25Okapi
 
 # ─────────────────────────────────────────────────────────────
 # Cross-Encoder Re-ranker
@@ -55,7 +56,7 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         rerank_top_k = settings.FAST_MODE_RERANK_TOP_K
 
     all_docs: list[Document] = []
-    source_chunks: dict[str, list[tuple[float, Document]]] = {}
+    source_chunks = {}
 
     # ── BUG2-003 FIX: Structured Source-Intent Filtering ───────────────────────
     # The Contextualizer now explicitly determines which sources the user 
@@ -111,26 +112,57 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         )
 
         print(f"[Retrieval] Retrieved {len(raw_scored_docs)} raw chunks from {source_id}")
-        source_chunks[source_id] = [(score, doc) for doc, score in raw_scored_docs]
+        if not raw_scored_docs:
+            source_chunks[source_id] = []
+            continue
+            
+        tokenized_corpus = [doc.page_content.lower().split() for doc, _ in raw_scored_docs]
+        bm25 = BM25Okapi(tokenized_corpus)
+        tokenized_query = query.lower().split()
+        bm25_scores = bm25.get_scores(tokenized_query)
+        
+        source_chunks[source_id] = [
+            (semantic_score, bm25_scores[i], doc) 
+            for i, (doc, semantic_score) in enumerate(raw_scored_docs)
+        ]
 
     # Step 2: Normalize the scores for each source independently
     for sid, chunks in source_chunks.items():
         if not chunks:
             continue
-        scores = [score for score, _ in chunks]
-        min_score = min(scores)
-        max_score = max(scores)
+        sem_scores = [sem for sem, _, _ in chunks]
+        bm25_scores = [bm25 for _, bm25, _ in chunks]
+        
+        min_sem, max_sem = min(sem_scores), max(sem_scores)
+        min_bm25, max_bm25 = min(bm25_scores), max(bm25_scores)
         
         normalized_chunks = []
-        for score, doc in chunks:
-            if max_score == min_score:
-                norm_score = 1.0
-            else:
-                norm_score = (score - min_score) / (max_score - min_score)
-            normalized_chunks.append((norm_score, doc))
+        for sem, bm25, doc in chunks:
+            norm_sem = 1.0 if max_sem == min_sem else (sem - min_sem) / (max_sem - min_sem)
+            norm_bm25 = 1.0 if max_bm25 == min_bm25 else (bm25 - min_bm25) / (max_bm25 - min_bm25)
+            normalized_chunks.append((norm_sem, norm_bm25, doc))
         source_chunks[sid] = normalized_chunks
 
-    # Step 3: Flatten all (normalized_score, doc) tuples into a single merged list called all_chunks
+    # Step 3: Apply Reciprocal Rank Fusion
+    for sid, chunks in source_chunks.items():
+        if not chunks:
+            continue
+        # Assign semantic rank
+        chunks.sort(key=lambda x: x[0], reverse=True)
+        sem_ranked = [(ns, nb, doc, rank) for rank, (ns, nb, doc) in enumerate(chunks, 1)]
+        
+        # Assign bm25 rank
+        sem_ranked.sort(key=lambda x: x[1], reverse=True)
+        rrf_chunks = []
+        for bm25_rank, (ns, nb, doc, sem_rank) in enumerate(sem_ranked, 1):
+            rrf_score = (1 / (60 + sem_rank)) + (1 / (60 + bm25_rank))
+            rrf_chunks.append((rrf_score, doc))
+            
+        # Sort all chunks by rrf_score descending
+        rrf_chunks.sort(key=lambda x: x[0], reverse=True)
+        source_chunks[sid] = rrf_chunks
+
+    # Step 4: Flatten all per-source RRF-ranked chunks into the single all_chunks list
     all_chunks = []
     for chunks in source_chunks.values():
         all_chunks.extend(chunks)
