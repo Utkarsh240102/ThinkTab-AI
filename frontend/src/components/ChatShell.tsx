@@ -48,6 +48,7 @@ export default function ChatShell() {
   const embedReadyRef = useRef<boolean>(false);
   const isSummarizingRef = useRef<boolean>(false);
   const lastSummarizedLengthRef = useRef<number>(0);
+  const BACKEND_URL = "http://localhost:8000";
 
   /* PDF context: null = no PDF loaded, object = a PDF is attached */
   const [pdfContext, setPdfContext] = useState<{ source_id: string; content: string } | null>(null);
@@ -108,6 +109,9 @@ export default function ChatShell() {
       if (isSummarizingRef.current) return;
 
       isSummarizingRef.current = true;
+      // Eagerly update the debounce ref to prevent infinite retry spam on failure
+      lastSummarizedLengthRef.current = chatHistory.length;
+      
       const messagesToDrop = chatHistory.slice(
         0,
         chatHistory.length - 10
@@ -127,7 +131,6 @@ export default function ChatShell() {
         .then((data) => {
           if (data.summary) {
             setHistorySummary(data.summary);
-            lastSummarizedLengthRef.current = chatHistory.length;
           }
         })
         .catch((err) =>
@@ -147,7 +150,6 @@ export default function ChatShell() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, statusText, error]);
 
-  const BACKEND_URL = "http://localhost:8000";
 
   /* ── Reusable Tab Scraper ── */
   async function scrapeActiveTab(): Promise<Context[]> {

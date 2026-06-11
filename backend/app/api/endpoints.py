@@ -353,8 +353,13 @@ async def chat(request: ChatRequest):
                     try:
                         if event_str.startswith("data:"):
                             payload = json.loads(event_str[5:].strip())
+                            # Robust structural check: a failed Fast Mode response always has
+                            # zero confidence AND zero evidence, regardless of the LLM's
+                            # exact wording. This is model-agnostic and catches all failure
+                            # variants from Llama-3 70B without fragile string matching.
                             if (payload.get("type") == "final" and
-                                payload.get("answer", "").strip().lower() == "i cannot find the answer on this page."):
+                                    payload.get("confidence_score", 1.0) == 0.0 and
+                                    len(payload.get("evidence", ["placeholder"])) == 0):
                                 is_safety_net = True
                     except Exception:
                         pass  # If parsing fails, treat as a normal event
