@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from app.services.vector_store import embedding_cache
 from app.graph.state import GraphState
 from app.core.config import settings
+from rank_bm25 import BM25Okapi
 
 # ─────────────────────────────────────────────────────────────
 # Cross-Encoder Re-ranker
@@ -55,33 +56,17 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         rerank_top_k = settings.FAST_MODE_RERANK_TOP_K
 
     all_docs: list[Document] = []
+    source_chunks = {}
 
-    # ── BUG2-003 FIX: Source-intent filtering ────────────────────────────────
-    # When a user explicitly names a source ("summarize the web page", "read
-    # the PDF"), restricting retrieval to only that source prevents the
-    # re-ranker from pulling chunks from the wrong place.
+    # ── BUG2-003 FIX: Structured Source-Intent Filtering ───────────────────────
+    # The Contextualizer now explicitly determines which sources the user 
+    # wants to search and populates state["target_source_ids"].
+    target_source_ids = state.get("target_source_ids", [])
     
-    _BOTH_SIGNALS = ["both webpages", "both pages", "all pages", "all tabs"]
-    _ACTIVE_SIGNALS = ["this page", "current page", "active tab", "current tab", "this webpage", "current webpage", "the website"]
-    _PINNED_SIGNALS = ["pinned", "pinned tab", "pinned page", "other tab", "background tab"]
-    _PDF_SIGNALS = ["pdf", "document", "the file", "the resume", "uploaded file", "attached file"]
-
-    _query_lower = query.lower()
-    if any(kw in _query_lower for kw in _BOTH_SIGNALS):
-        source_filter = None
-        print("[Retrieval] Source intent: BOTH active and pinned sources")
-    elif any(kw in _query_lower for kw in _ACTIVE_SIGNALS):
-        source_filter = "active"
-        print("[Retrieval] Source intent: ACTIVE TAB only")
-    elif any(kw in _query_lower for kw in _PINNED_SIGNALS):
-        source_filter = "pinned"
-        print("[Retrieval] Source intent: PINNED TAB only")
-    elif any(kw in _query_lower for kw in _PDF_SIGNALS):
-        source_filter = "pdf"
-        print("[Retrieval] Source intent: PDF only")
+    if not target_source_ids:
+        print("[Retrieval] Target source list is empty. Searching all available sources.")
     else:
-        source_filter = None
-        print("[Retrieval] Source intent: all sources")
+        print(f"[Retrieval] Deterministic routing to {len(target_source_ids)} specific sources.")
     # ── End BUG2-003 FIX ─────────────────────────────────────────────────────
 
     # Step 1: Retrieve top K chunks from each source
@@ -89,21 +74,24 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
         source_id = ctx["source_id"]
         content = ctx["content"]
 
-        # ── Source-intent gate ────────────────────────────────────────────────
-        # Skip this context if it doesn't match the source the user asked about.
-        is_pdf = source_id.lower().endswith('.pdf')
-        is_active = (source_id == "Active Tab")
+        # ── Deterministic source-intent gate ───────────────────────────────────
+        # IMPORTANT: Use flexible matching, NOT exact equality.
+        # The Contextualizer returns short labels like "Active Tab" or "Pinned Tab"
+        # but source_ids in the DB are full strings like "Active Tab: United States - Wikipedia".
+        # We match if any target is a prefix of the source_id OR the source_id starts with any target.
+        def _is_targeted(sid: str, targets: list[str]) -> bool:
+            sid_lower = sid.lower()
+            for t in targets:
+                t_lower = t.lower()
+                # Exact match OR prefix match in either direction
+                if t_lower == sid_lower or sid_lower.startswith(t_lower) or t_lower.startswith(sid_lower):
+                    return True
+            return False
 
-        if source_filter == "active" and not is_active:
-            print(f"[Retrieval] Skipping '{source_id}' (active-only intent)")
+        if target_source_ids and not _is_targeted(source_id, target_source_ids):
+            print(f"[Retrieval] Skipping '{source_id}' (not in target_source_ids)")
             continue
-        if source_filter == "pinned" and (is_active or is_pdf):
-            print(f"[Retrieval] Skipping '{source_id}' (pinned-only intent)")
-            continue
-        if source_filter == "pdf" and not is_pdf:
-            print(f"[Retrieval] Skipping '{source_id}' (pdf-only intent)")
-            continue
-        # ── End source-intent gate ────────────────────────────────────────────
+        # ── End deterministic source-intent gate ───────────────────────────────
 
         # Guard: skip empty or whitespace-only content — FAISS.from_documents
         # crashes with IndexError when there are no chunks to embed
@@ -111,18 +99,82 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
             print(f"[Retrieval] WARNING: Skipping empty content for source '{source_id}'")
             continue
 
-        print(f"[Retrieval] Searching FAISS for source: {source_id}")
+        print(f"[Retrieval] Searching ChromaDB for source: {source_id}")
 
-        # get_or_embed: returns cached FAISS index or embeds fresh
-        faiss_index = await asyncio.to_thread(embedding_cache.get_or_embed, content, source_id)
+        # ensure_embedded: parses and embeds fresh content if source_id not found in ChromaDB
+        await asyncio.to_thread(embedding_cache.ensure_embedded, content, source_id)
 
-        raw_docs = faiss_index.similarity_search(
+        raw_scored_docs = await asyncio.to_thread(
+            embedding_cache.vector_store.similarity_search_with_score,
             query,
-            k=retrieve_k
+            k=retrieve_k,
+            filter={"source": source_id}
         )
 
-        print(f"[Retrieval] Retrieved {len(raw_docs)} raw chunks from {source_id}")
-        all_docs.extend(raw_docs)
+        print(f"[Retrieval] Retrieved {len(raw_scored_docs)} raw chunks from {source_id}")
+        if not raw_scored_docs:
+            source_chunks[source_id] = []
+            continue
+            
+        MIN_BM25_LENGTH = 100
+        bm25_eligible = [(i, doc) for i, (doc, _) in enumerate(raw_scored_docs) if len(doc.page_content) >= MIN_BM25_LENGTH]
+        
+        bm25_scores = [0.0] * len(raw_scored_docs)
+        if bm25_eligible:
+            tokenized_corpus = [doc.page_content.lower().split() for _, doc in bm25_eligible]
+            bm25 = BM25Okapi(tokenized_corpus)
+            tokenized_query = query.lower().split()
+            valid_scores = bm25.get_scores(tokenized_query)
+            for idx_in_valid, (orig_idx, _) in enumerate(bm25_eligible):
+                bm25_scores[orig_idx] = valid_scores[idx_in_valid]
+        
+        source_chunks[source_id] = [
+            (semantic_score, bm25_scores[i], doc) 
+            for i, (doc, semantic_score) in enumerate(raw_scored_docs)
+        ]
+
+    # Step 2: Normalize the scores for each source independently
+    for sid, chunks in source_chunks.items():
+        if not chunks:
+            continue
+        sem_scores = [sem for sem, _, _ in chunks]
+        bm25_scores = [bm25 for _, bm25, _ in chunks]
+        
+        min_sem, max_sem = min(sem_scores), max(sem_scores)
+        min_bm25, max_bm25 = min(bm25_scores), max(bm25_scores)
+        
+        normalized_chunks = []
+        for sem, bm25, doc in chunks:
+            norm_sem = 1.0 if max_sem == min_sem else (sem - min_sem) / (max_sem - min_sem)
+            norm_bm25 = 1.0 if max_bm25 == min_bm25 else (bm25 - min_bm25) / (max_bm25 - min_bm25)
+            normalized_chunks.append((norm_sem, norm_bm25, doc))
+        source_chunks[sid] = normalized_chunks
+
+    # Step 3: Apply Reciprocal Rank Fusion
+    for sid, chunks in source_chunks.items():
+        if not chunks:
+            continue
+        # Assign semantic rank
+        chunks.sort(key=lambda x: x[0], reverse=True)
+        sem_ranked = [(ns, nb, doc, rank) for rank, (ns, nb, doc) in enumerate(chunks, 1)]
+        
+        # Assign bm25 rank
+        sem_ranked.sort(key=lambda x: x[1], reverse=True)
+        rrf_chunks = []
+        for bm25_rank, (ns, nb, doc, sem_rank) in enumerate(sem_ranked, 1):
+            rrf_score = (1 / (60 + sem_rank)) + (1 / (60 + bm25_rank))
+            rrf_chunks.append((rrf_score, doc))
+            
+        # Sort all chunks by rrf_score descending
+        rrf_chunks.sort(key=lambda x: x[0], reverse=True)
+        source_chunks[sid] = rrf_chunks
+
+    # Step 4: Flatten all per-source RRF-ranked chunks into the single all_chunks list
+    all_chunks = []
+    for chunks in source_chunks.values():
+        all_chunks.extend(chunks)
+        
+    all_docs = [doc for _, doc in all_chunks]
 
     # Guard: If no docs retrieved at all, return a fallback document
     if not all_docs:
@@ -136,7 +188,17 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
 
     # Step 2: Re-rank all collected chunks
     SUMMARY_KEYWORDS = ["summarize", "summary", "overview", "brief", "compare", "explain", "tell me about"]
-    is_summary = any(kw in query.lower() for kw in SUMMARY_KEYWORDS)
+    _orig_for_summary = state.get("original_query", "").lower()
+    is_summary = any(kw in query.lower() for kw in SUMMARY_KEYWORDS) or any(kw in _orig_for_summary for kw in SUMMARY_KEYWORDS)
+
+    # Boost chunk budget for multi-source queries so each source gets adequate representation
+    num_active_sources = len(set(doc.metadata.get("source", "unknown") for doc in all_docs))
+    if num_active_sources > 1:
+        min_per_source = 3
+        boosted_k = max(rerank_top_k, num_active_sources * min_per_source)
+        if boosted_k > rerank_top_k:
+            print(f"[Retrieval] Boosting rerank_top_k from {rerank_top_k} to {boosted_k} for {num_active_sources} sources")
+            rerank_top_k = boosted_k
 
     if is_summary:
         print("[Retrieval] Summary intent detected. Bypassing CrossEncoder and interleaving sources.")
@@ -146,8 +208,16 @@ async def retrieve_and_rerank(state: GraphState) -> GraphState:
             if src not in docs_by_source:
                 docs_by_source[src] = []
             docs_by_source[src].append(doc)
-            
+
+        # Guarantee each source gets at least min_per_source chunks before round-robin fills the rest
         top_docs = []
+        guaranteed_per_source = min(3, rerank_top_k // max(len(docs_by_source), 1))
+        for src in list(docs_by_source.keys()):
+            for _ in range(guaranteed_per_source):
+                if docs_by_source[src]:
+                    top_docs.append(docs_by_source[src].pop(0))
+
+        # Fill remaining budget via round-robin
         while len(top_docs) < rerank_top_k and docs_by_source:
             for src in list(docs_by_source.keys()):
                 if docs_by_source[src]:

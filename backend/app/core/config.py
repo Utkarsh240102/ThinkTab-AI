@@ -4,6 +4,7 @@ class Settings(BaseSettings):
     # API Keys
     OPENROUTER_API_KEY: str = ""
     GROQ_API_KEY: str = ""
+    GROQ_API_KEYS: str = ""
     GOOGLE_API_KEY: str = ""
     TAVILY_API_KEY: str = ""   # kept for backward compat; unused if Serper is active
     SERPER_API_KEY: str = ""
@@ -24,12 +25,12 @@ class Settings(BaseSettings):
     MAX_RETRIEVAL_RETRIES: int = 3   # Max times to rewrite + re-retrieve if answer is useless (IsUSE)
 
     # Fast Mode Retrieval Settings
-    FAST_MODE_RETRIEVE_K: int = 10   # How many chunks FAISS fetches initially
-    FAST_MODE_RERANK_TOP_K: int = 5  # How many chunks survive after re-ranking
+    FAST_MODE_RETRIEVE_K: int = 20   # How many chunks FAISS fetches initially
+    FAST_MODE_RERANK_TOP_K: int = 10 # How many chunks survive after re-ranking
 
     # Deep Mode Retrieval Settings
-    DEEP_MODE_RETRIEVE_K: int = 15   # Fetch more chunks for deep analysis
-    DEEP_MODE_RERANK_TOP_K: int = 8  # Keep more chunks to feed into CRAG batch evaluator
+    DEEP_MODE_RETRIEVE_K: int = 30   # Fetch more chunks for deep analysis
+    DEEP_MODE_RERANK_TOP_K: int = 15 # Keep more chunks to feed into CRAG batch evaluator
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

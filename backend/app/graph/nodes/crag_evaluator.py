@@ -4,6 +4,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.graph.state import GraphState
 from app.core.config import settings
+from app.services.llm_service import fast_llm
 
 
 # ─────────────────────────────────────────────────────────────
@@ -90,7 +91,8 @@ def eval_docs(state: GraphState) -> GraphState:
     # always knows the total count it must match with its scores
     chunks_text = ""
     for i, doc in enumerate(docs):
-        chunks_text += f"\nChunk {i+1} of {len(docs)}: {doc.page_content}\n"
+        source_name = doc.metadata.get("source", "Unknown")
+        chunks_text += f"\nChunk {i+1} of {len(docs)} [Source: {source_name}]: {doc.page_content}\n"
 
     messages = [
         SystemMessage(content=CRAG_SYSTEM_PROMPT),

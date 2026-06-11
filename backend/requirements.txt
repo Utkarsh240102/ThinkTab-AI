@@ -18,9 +18,11 @@ langchain-groq
 langchain-huggingface
 langgraph
 langsmith
+langchain-chroma
 
 # Vector Store
-faiss-cpu
+chromadb
+langchain-chroma
 
 # Re-Ranking
 sentence-transformers

@@ -37,6 +37,9 @@ venv/
 *.index
 faiss_store/
 
+chroma_data/
+chroma.sqlite3
+
 # ===========================
 # Downloaded ML Models
 # ===========================

@@ -35,9 +35,10 @@ Classify every incoming user query into exactly ONE of three categories:
 1. "chat"     The message is a greeting, farewell, small talk, social pleasantry, or a meta-question asking about the conversation history.
                It does NOT need any document search or factual retrieval.
                Examples: "hi", "how are you", "what did I ask earlier?", "summarize our chat", "what was my first question?"
+               CRITICAL: Do NOT classify requests to summarize a document, page, or tab as "chat".
 
-2. "simple"  → A direct factual question that needs a single document lookup.
-               Examples: "what is the price?", "who wrote this?", "when was it founded?"
+2. "simple"  → A direct factual question that needs a single document lookup, or a request for a basic summary of the current document/tab/page.
+               Examples: "what is the price?", "who wrote this?", "summarize this page", "summarize the tab"
 
 3. "complex" → Requires multi-step reasoning, comparison, analysis, or evaluation.
                Examples: "compare the pros and cons", "why did this happen?", "analyze the argument"
@@ -58,6 +59,20 @@ def route_query(state: GraphState) -> Literal["chat", "fast", "deep"]:
     Query complexity is judged by content (keywords + LLM), not document count.
     """
     query = state["query"].lower().strip()
+
+    # ── BUG 2 FIX: Document-Reference Guard ─────────────────────────────
+    DOCUMENT_SIGNALS = [
+        "this tab", "the tab", "all tab", "all tabs", "all the tab",
+        "pinned tab", "active tab", "current tab", "the pdf",
+        "attached file", "the file", "uploaded file", "the document",
+        "the page", "this page", "the webpage", "the website"
+    ]
+
+    query_lower = state["query"].lower()
+    if any(signal in query_lower for signal in DOCUMENT_SIGNALS):
+        print("[Auto Router] Document-reference signal detected. Short-circuiting to FAST.")
+        return "fast"
+    # ── End BUG 2 FIX ───────────────────────────────────────────────────
 
     # ── Tier 1: Keyword Rule Check (0ms) ────────────────────────────────
     # Explicit deep-reasoning keywords → skip to Deep Mode immediately

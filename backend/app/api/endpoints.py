@@ -353,8 +353,13 @@ async def chat(request: ChatRequest):
                     try:
                         if event_str.startswith("data:"):
                             payload = json.loads(event_str[5:].strip())
+                            # Robust structural check: a failed Fast Mode response always has
+                            # zero confidence AND zero evidence, regardless of the LLM's
+                            # exact wording. This is model-agnostic and catches all failure
+                            # variants from Llama-3 70B without fragile string matching.
                             if (payload.get("type") == "final" and
-                                payload.get("answer", "").strip().lower() == "i cannot find the answer on this page."):
+                                    payload.get("confidence_score", 1.0) == 0.0 and
+                                    len(payload.get("evidence", ["placeholder"])) == 0):
                                 is_safety_net = True
                     except Exception:
                         pass  # If parsing fails, treat as a normal event
@@ -429,7 +434,10 @@ async def embed_source(context: ContextItem):
         return {"status": "skipped", "source_id": context.source_id, "reason": "empty content"}
 
     from app.services.vector_store import embedding_cache
-    embedding_cache.get_or_embed(context.content, context.source_id)
+    # ensure_embedded: parses and embeds fresh content if source_id not found in ChromaDB
+    # We run this in a thread since it might do heavy chunking + embedding
+    import asyncio
+    await asyncio.to_thread(embedding_cache.ensure_embedded, context.content, context.source_id)
     return {"status": "cached", "source_id": context.source_id}
 
 
