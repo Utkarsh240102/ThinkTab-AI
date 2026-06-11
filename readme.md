@@ -1,8 +1,10 @@
-# ThinkTab AI
+# 🧠 ThinkTab AI
 
 > **Your Contextual Web Assistant**
 
-ThinkTab AI is a powerful, contextual AI research assistant packaged as a Google Chrome Extension. It seamlessly integrates into your browsing experience via the Chrome side panel, allowing you to ask complex questions, extract insights, and summarize the content of the webpages you are currently reading. ThinkTab AI operates with a **Soft Human-in-the-Loop (HITL)** design, providing instant responses with the option to escalate complex tasks to a deeper, self-evaluating reasoning pipeline.
+ThinkTab AI is a powerful, contextual AI research assistant packaged as a Google Chrome Extension. It seamlessly integrates into your browsing experience via the Chrome side panel, allowing you to ask complex questions, extract insights, and summarize the content of the webpages you are currently reading. 
+
+ThinkTab AI operates with a **Soft Human-in-the-Loop (HITL)** design, providing instant responses with the option to escalate complex tasks to a deeper, self-evaluating reasoning pipeline.
 
 ---
 
@@ -20,22 +22,22 @@ ThinkTab AI is a powerful, contextual AI research assistant packaged as a Google
 
 ThinkTab AI uses a robust split architecture, pairing a fast client-side Chrome Extension with a heavy-duty Python local backend.
 
-**Frontend (Chrome Extension)**
-- **React 19 & TypeScript 6**
-- **Vite 8**
-- **Tailwind-inspired Vanilla CSS** (Glassmorphism & Dark Mode)
-- **Client-Side PDF Extraction** (`pdfjs-dist`)
-- **Chrome Extension APIs** (`sidePanel`, `activeTab`, `scripting`)
+### Frontend (Chrome Extension)
+- **Framework:** React 19 & TypeScript 6
+- **Build Tool:** Vite 8
+- **Styling:** Tailwind-inspired Vanilla CSS (Glassmorphism & Dark Mode)
+- **Features:** Client-Side PDF Extraction (`pdfjs-dist`), Chrome Extension APIs (`sidePanel`, `activeTab`, `scripting`)
 
-**Backend (Local Python Server)**
-- **FastAPI & Uvicorn** for Server-Sent Events (SSE) streaming
-- **LangChain & LangGraph** for orchestrating the multi-agent RAG pipeline
-- **ChromaDB** for persistent local vector caching
-- **BAAI/bge-m3** (runs on CPU) for 1024-dimensional document embeddings
-- **BAAI/bge-reranker-base** for cross-encoder search re-ranking
-- **GPT-4o-mini** (via OpenRouter) as the "Fast Brain" for routing, CRAG scoring, and evaluation
-- **Llama-3.3-70B** (via Groq) as the "Smart Brain" for final answer generation
-- **Serper API** for Google Search fallback
+### Backend (Local Python Server)
+- **Framework:** FastAPI & Uvicorn for Server-Sent Events (SSE) streaming
+- **Orchestration:** LangChain & LangGraph for orchestrating the multi-agent RAG pipeline
+- **Vector DB:** ChromaDB for persistent local vector caching
+- **Embeddings:** BAAI/bge-m3 (runs on CPU) for 1024-dimensional document embeddings
+- **Re-ranking:** BAAI/bge-reranker-base for cross-encoder search re-ranking
+- **LLMs:** 
+  - **Fast Brain:** GPT-4o-mini (via OpenRouter) for routing, CRAG scoring, and evaluation
+  - **Smart Brain:** Llama-3.3-70B (via Groq) for final answer generation
+- **Web Search:** Serper API for Google Search fallback
 
 ---
 
@@ -64,4 +66,63 @@ Designed for complex comparisons, evaluations, and ambiguous queries. LangGraph 
 
 ## 🚀 Getting Started
 
-*(Instructions for local setup, installing the unpacked extension in Chrome, and starting the FastAPI server go here).*
+Follow these instructions to run the ThinkTab AI backend server and install the Chrome Extension.
+
+### 1. Prerequisites
+- **Python 3.11+**
+- **Node.js 18+**
+- **Chrome browser**
+
+### 2. Environment Variables
+Create a `.env` file in the root directory (`ThinkTab-AI/.env`) and add your API keys:
+```env
+OPENROUTER_API_KEY=your_openrouter_key
+GROQ_API_KEY=your_groq_key
+SERPER_API_KEY=your_serper_key
+```
+
+### 3. Backend Setup
+1. Navigate to the `backend` directory:
+   ```bash
+   cd backend
+   ```
+2. Create and activate a Python virtual environment:
+   ```bash
+   python -m venv venv
+   # On Windows:
+   venv\Scripts\activate
+   # On Mac/Linux:
+   source venv/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Start the FastAPI server:
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+   *(Note: The first run will automatically download the local embedding models (~1.2GB) which may take a few minutes).*
+
+### 4. Frontend Build
+1. Open a new terminal and navigate to the `frontend` directory:
+   ```bash
+   cd frontend
+   ```
+2. Install Node dependencies:
+   ```bash
+   npm install
+   ```
+3. Build the React extension:
+   ```bash
+   npm run build
+   ```
+   *This outputs the final extension files into the `frontend/dist/` folder.*
+
+### 5. Install the Extension in Chrome
+1. Open Google Chrome and navigate to `chrome://extensions/`.
+2. Turn on **Developer mode** (toggle in the top right corner).
+3. Click the **Load unpacked** button.
+4. Select the `ThinkTab-AI/frontend/dist/` folder.
+5. Pin the ThinkTab AI extension to your browser toolbar.
+6. Click the extension icon to open the Side Panel and start chatting!
