@@ -108,6 +108,9 @@ export default function ChatShell() {
       if (isSummarizingRef.current) return;
 
       isSummarizingRef.current = true;
+      // Eagerly update the debounce ref to prevent infinite retry spam on failure
+      lastSummarizedLengthRef.current = chatHistory.length;
+      
       const messagesToDrop = chatHistory.slice(
         0,
         chatHistory.length - 10
@@ -127,7 +130,6 @@ export default function ChatShell() {
         .then((data) => {
           if (data.summary) {
             setHistorySummary(data.summary);
-            lastSummarizedLengthRef.current = chatHistory.length;
           }
         })
         .catch((err) =>
