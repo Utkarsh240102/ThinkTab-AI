@@ -22,6 +22,76 @@ ThinkTab AI operates with a **Soft Human-in-the-Loop (HITL)** design, providing 
 
 ThinkTab AI uses a robust split architecture, pairing a fast client-side Chrome Extension with a heavy-duty Python local backend.
 
+```mermaid
+flowchart TB
+    subgraph ClientLayer ["1. Client Layer (Chrome Extension)"]
+        direction LR
+        Panel["React + Vite Side Panel"]
+        Scraper["content.js (DOM Scraper)"]
+        PDF["pdfjs-dist (PDF Extractor)"]
+        SSE["SSE Streaming Hook"]
+    end
+
+    subgraph APILayer ["2. API & Routing (FastAPI)"]
+        direction TB
+        Endpoint["POST /api/chat\n(SSE Endpoint)"]
+        CacheManager["LRU Cache Manager\n(Thread-safe RLock)"]
+        Router["Auto Router\n(Keyword + LLM Classifier)"]
+    end
+
+    subgraph DataLayer ["3. Data & Embedding Layer"]
+        direction TB
+        Chroma[("FAISS / ChromaDB\n(Local Vector Store)")]
+        Embed["BAAI/bge-m3\n(Local CPU Embedding)"]
+        Rerank["BAAI/bge-reranker-base\n(Cross-Encoder)"]
+    end
+
+    subgraph OrchestrationLayer ["4. LangGraph RAG Pipelines"]
+        direction LR
+        Fast["Fast Mode DAG\n(Linear Extraction)"]
+        Deep["Deep Mode DAG\n(Self-RAG Loops)"]
+    end
+
+    subgraph UpstreamLayer ["5. Upstream Providers"]
+        direction LR
+        Groq["Groq API\n(llama-3.3-70b)\nGeneration Engine"]
+        OpenRouter["OpenRouter API\n(gpt-4o-mini)\nLogic & Routing Engine"]
+        Serper["Serper API\n(Google Search Fallback)"]
+    end
+
+    %% Connections
+    Panel <-->|"POST /api/chat\n(SSE Stream)"| Endpoint
+    Scraper -->|"HTML Payload"| Endpoint
+    PDF -->|"Text Payload"| Endpoint
+
+    Endpoint --> CacheManager
+    CacheManager -->|"Hash Check"| Chroma
+    CacheManager --> Router
+
+    Router -->|"Simple Intent"| Fast
+    Router -->|"Complex Intent"| Deep
+
+    Fast & Deep <-->|"Semantic + BM25 Search"| Chroma
+    Chroma <-->|"Generate Embeddings"| Embed
+    Chroma <-->|"Re-rank Chunks"| Rerank
+
+    Fast & Deep <-->|"Routing, CRAG, Hallucination checks"| OpenRouter
+    Fast & Deep <-->|"Draft & Final Generation"| Groq
+    Deep <-->|"Web Fallback (If local fails)"| Serper
+
+    classDef client fill:#8B5CF6,stroke:#fff,stroke-width:2px,color:#fff
+    classDef api fill:#3b82f6,stroke:#fff,stroke-width:2px,color:#fff
+    classDef data fill:#FDB515,stroke:#fff,stroke-width:2px,color:#000
+    classDef logic fill:#10b981,stroke:#fff,stroke-width:2px,color:#fff
+    classDef upstream fill:#ef4444,stroke:#fff,stroke-width:2px,color:#fff
+
+    class Panel,Scraper,PDF,SSE client
+    class Endpoint,CacheManager,Router api
+    class Chroma,Embed,Rerank data
+    class Fast,Deep logic
+    class Groq,OpenRouter,Serper upstream
+```
+
 ### Frontend (Chrome Extension)
 - **Framework:** React 18 & TypeScript 5
 - **Build Tool:** Vite 5
@@ -45,12 +115,57 @@ ThinkTab AI uses a robust split architecture, pairing a fast client-side Chrome 
 
 When you ask a question, ThinkTab's **Auto Router** analyzes your intent and determines the best RAG (Retrieval-Augmented Generation) pipeline for the job.
 
+```mermaid
+flowchart TD
+    Query["User Query"] --> AutoRouter{"Auto Router\n(Intent Classifier)"}
+    
+    AutoRouter -->|Keyword: this tab, the pdf| FastMode["Fast Mode"]
+    AutoRouter -->|Keyword: compare, analyze| DeepMode["Deep Mode"]
+    AutoRouter -->|LLM: Conversational| ChatMode["Direct Chat Mode\nNo RAG"]
+    AutoRouter -->|LLM: Simple/Factual| FastMode
+    AutoRouter -->|LLM: Complex/Ambiguous| DeepMode
+
+    classDef router fill:#8B5CF6,stroke:#fff,stroke-width:2px,color:#fff
+    classDef target fill:#10b981,stroke:#fff,stroke-width:2px,color:#fff
+    
+    class AutoRouter router
+    class FastMode,DeepMode,ChatMode target
+```
+
 ### ⚡ Fast Mode
 Designed for speed and simple factual extraction. 
 1. **Contextualization**: Resolves pronouns (e.g. "summarize *it*").
 2. **Retrieve & Rerank**: Fetches relevant chunks from ChromaDB and cross-encodes them.
 3. **Batch CRAG Filter**: Swiftly drops irrelevant chunks.
 4. **Generate**: Streams the answer directly to the UI.
+
+```mermaid
+flowchart TD
+    Start["Active Tab HTML / PDF Upload"] --> HashCheck{"Content Hash Check\n(LRU Thread-safe Cache)"}
+    
+    HashCheck -->|Cache Hit| LoadCache["Load FAISS Index\nfrom Memory/Disk"]
+    HashCheck -->|Cache Miss| Embed["Chunk & Embed\n(bge-m3)"]
+    Embed --> SaveCache["Save to FAISS & Cache"]
+    
+    LoadCache --> Retrieval["Hybrid Retrieval & Rerank\n(FAISS + BM25 + bge-reranker)"]
+    SaveCache --> Retrieval
+    
+    Query["User Query"] --> Contextualizer["Contextualizer\n(Resolves pronouns)"]
+    Contextualizer --> Retrieval
+    Retrieval --> CRAGFilter["Batch CRAG Filter\n(Drops score < 0.3)"]
+    CRAGFilter --> Generate["Fast Generation\n(llama-3.3-70b)"]
+    Generate --> Output["Stream via SSE"]
+    
+    classDef input fill:#6366f1,stroke:#fff,stroke-width:2px,color:#fff
+    classDef cache fill:#FDB515,stroke:#fff,stroke-width:2px,color:#000
+    classDef logic fill:#10b981,stroke:#fff,stroke-width:2px,color:#fff
+    classDef output fill:#ef4444,stroke:#fff,stroke-width:2px,color:#fff
+    
+    class Start,Query input
+    class HashCheck,LoadCache,Embed,SaveCache cache
+    class Contextualizer,Retrieval,CRAGFilter,Generate logic
+    class Output output
+```
 
 ### 🕵️ Deep Mode (Self-RAG)
 Designed for complex comparisons, evaluations, and ambiguous queries. LangGraph orchestrates a multi-step Directed Acyclic Graph (DAG) with self-correction loops.
@@ -61,6 +176,49 @@ Designed for complex comparisons, evaluations, and ambiguous queries. LangGraph 
 5. **Hallucination Grader**: Checks if the draft is strictly grounded in the provided context. If not, it forces a rewrite.
 6. **Usefulness Grader**: Checks if the answer actually resolves your original question.
 7. **Automated Rewriting**: If the answer fails the Usefulness check, the **Question Rewriter** dynamically rephrases your original query and triggers a full **Re-Retrieval** loop to try again from a new angle.
+
+```mermaid
+flowchart TD
+    Start["Context Payload"] --> HashCheck{"Content Hash\nCache Check"}
+    HashCheck -->|Cache Hit| Memory["Load FAISS Index"]
+    HashCheck -->|Cache Miss| Embed["Chunk & Embed\n(bge-m3)"]
+    Embed --> Memory
+    
+    Query["User Query"] --> Contextualizer["Contextualizer\n(Resolves UI references)"]
+    Memory --> Contextualizer
+    
+    Contextualizer --> Retrieval["Hybrid Retrieval & Rerank"]
+    Retrieval --> CRAGEval{"CRAG Evaluator"}
+    
+    CRAGEval -->|INCORRECT / AMBIGUOUS| WebSearch["Serper Web Search Fallback"]
+    CRAGEval -->|CORRECT| Refiner["CRAG Refiner\n(Condenses context)"]
+    WebSearch --> Refiner
+    
+    Refiner --> Generate["Draft Generation\n(llama-3.3-70b)"]
+    
+    Generate --> HalGrader{"Hallucination Grader\n(Is claim supported?)"}
+    HalGrader -->|NO: Hallucination| Revise["Revise Answer\n(Strictly from context)"]
+    Revise --> HalGrader
+    
+    HalGrader -->|YES: Grounded| UseGrader{"Usefulness Grader\n(Does it answer query?)"}
+    
+    UseGrader -->|NO: Off-topic| Rewrite["Question Rewriter\n(Different angle)"]
+    Rewrite --> Retrieval
+    
+    UseGrader -->|YES: Answers Query| Output["Stream Final Answer via SSE"]
+
+    classDef data fill:#FDB515,stroke:#fff,stroke-width:2px,color:#000
+    classDef logic fill:#3b82f6,stroke:#fff,stroke-width:2px,color:#fff
+    classDef check fill:#8B5CF6,stroke:#fff,stroke-width:2px,color:#fff
+    classDef loop fill:#ef4444,stroke:#fff,stroke-width:2px,color:#fff
+    classDef output fill:#10b981,stroke:#fff,stroke-width:2px,color:#fff
+    
+    class HashCheck,Memory,Embed data
+    class Start,Query,Contextualizer,Retrieval,Refiner,Generate logic
+    class CRAGEval,HalGrader,UseGrader check
+    class Revise,Rewrite,WebSearch loop
+    class Output output
+```
 
 ---
 
