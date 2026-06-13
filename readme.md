@@ -23,8 +23,8 @@ ThinkTab AI operates with a **Soft Human-in-the-Loop (HITL)** design, providing 
 ThinkTab AI uses a robust split architecture, pairing a fast client-side Chrome Extension with a heavy-duty Python local backend.
 
 ### Frontend (Chrome Extension)
-- **Framework:** React 19 & TypeScript 6
-- **Build Tool:** Vite 8
+- **Framework:** React 18 & TypeScript 5
+- **Build Tool:** Vite 5
 - **Styling:** Tailwind-inspired Vanilla CSS (Glassmorphism & Dark Mode)
 - **Features:** Client-Side PDF Extraction (`pdfjs-dist`), Chrome Extension APIs (`sidePanel`, `activeTab`, `scripting`)
 
