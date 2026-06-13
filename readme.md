@@ -168,7 +168,7 @@ ThinkTab-AI/
 Ensure your virtual environment is activated, then run:
 ```bash
 cd backend
-pytest tests/
+python -m pytest tests/ -v
 ```
 
 ### Frontend Tests
