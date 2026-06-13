@@ -9,8 +9,9 @@ class MockCRAGOutput:
         self.scores = scores
 
 class MockBinaryOutput:
-    def __init__(self, binary_score):
-        self.binary_score = binary_score
+    def __init__(self, score, reason="Mock reason"):
+        self.score = score
+        self.reason = reason
 
 @patch("app.graph.nodes.crag_evaluator.fast_llm")
 def test_crag_evaluator_all_correct(mock_fast_llm):
@@ -51,33 +52,29 @@ def test_crag_evaluator_incorrect(mock_fast_llm):
     assert result["crag_verdict"] == "INCORRECT"
     assert len(result["good_docs"]) == 0
 
-@patch("app.graph.nodes.hallucination_grader.fast_llm")
-def test_hallucination_grader_success(mock_fast_llm):
+@patch("app.graph.nodes.hallucination_grader.hallucination_checker")
+def test_hallucination_grader_success(mock_checker):
     """Test hallucination grader allows grounded answers to pass."""
     state = {
         "refined_context": "The capital is Paris.",
         "draft_answer": "Paris is the capital."
     }
     
-    mock_chain = MagicMock()
-    mock_chain.invoke.return_value = MockBinaryOutput(binary_score="yes")
-    mock_fast_llm.with_structured_output.return_value = mock_chain
+    mock_checker.invoke.return_value = MockBinaryOutput(score="yes")
     
     result = check_hallucination(state)
         
     assert result["is_supported"] is True
 
-@patch("app.graph.nodes.answer_grader.fast_llm")
-def test_answer_grader_success(mock_fast_llm):
+@patch("app.graph.nodes.answer_grader.usefulness_checker")
+def test_answer_grader_success(mock_checker):
     """Test answer grader stops the pipeline when the answer is useful."""
     state = {
         "query": "What is the capital?",
         "draft_answer": "Paris is the capital."
     }
     
-    mock_chain = MagicMock()
-    mock_chain.invoke.return_value = MockBinaryOutput(binary_score="yes")
-    mock_fast_llm.with_structured_output.return_value = mock_chain
+    mock_checker.invoke.return_value = MockBinaryOutput(score="yes")
     
     result = check_usefulness(state)
         
