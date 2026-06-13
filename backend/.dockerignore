@@ -1,0 +1,32 @@
+# Git and Environment
+.git
+.gitignore
+.env
+
+# Virtual Environments
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+.eggs/
+
+# Local Vector Store and Models
+# We ignore these because we will mount them as volumes in docker-compose
+# to prevent copying massive directories into the image context.
+chroma_data/
+models/
+faiss_store/
+*.faiss
+*.index
+
+# LangChain cache
+.langchain.db
+
+# OS specific files
+.DS_Store
+Thumbs.db

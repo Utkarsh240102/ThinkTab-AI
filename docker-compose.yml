@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: thinktab_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Map the backend app code so you can hot-reload without rebuilding
+      # - ./backend/app:/app/app
+      
+      # Persist models to prevent 1.2GB re-downloads on every startup
+      - ./models:/app/models
+      
+      # Persist the ChromaDB vector store
+      - ./chroma_data:/app/chroma_data
+    
+    # Auto-restart if it crashes
+    restart: unless-stopped
