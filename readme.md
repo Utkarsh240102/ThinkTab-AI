@@ -82,6 +82,19 @@ SERPER_API_KEY=your_serper_key
 ```
 
 ### 3. Backend Setup
+
+You can run the backend either via **Docker** (Recommended) or locally using a Python virtual environment.
+
+#### Option A: Using Docker (Recommended)
+This method ensures you don't have to manage local Python dependencies. It also mounts your local models so you don't redownload them every time.
+1. Ensure Docker Desktop is running.
+2. From the root directory (`ThinkTab-AI/`), start the container:
+   ```bash
+   docker-compose up -d --build
+   ```
+3. The server will run in the background at `http://localhost:8000`. You can view logs with `docker-compose logs -f`.
+
+#### Option B: Local Python Environment
 1. Navigate to the `backend` directory:
    ```bash
    cd backend
