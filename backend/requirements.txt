@@ -38,3 +38,6 @@ pytest
 # Document Processing
 pypdf
 pymupdf
+
+# Hybrid Retrieval
+rank-bm25

@@ -126,3 +126,60 @@ SERPER_API_KEY=your_serper_key
 4. Select the `ThinkTab-AI/frontend/dist/` folder.
 5. Pin the ThinkTab AI extension to your browser toolbar.
 6. Click the extension icon to open the Side Panel and start chatting!
+
+---
+
+## 📂 Project Structure
+
+```text
+ThinkTab-AI/
+├── backend/               # FastAPI & LangChain Python server
+│   ├── app/
+│   │   ├── api/           # API routes (/chat, /embed)
+│   │   ├── core/          # Pydantic configuration & env loading
+│   │   ├── graph/         # LangGraph state & nodes (Fast/Deep mode)
+│   │   └── services/      # Vector store & LLM singletons
+│   └── tests/             # Pytest backend tests
+└── frontend/              # React & Vite Chrome Extension
+    ├── public/            # Chrome manifest & background/content scripts
+    └── src/
+        ├── components/    # UI components (ChatShell, UI Bubbles)
+        └── hooks/         # Custom hooks (SSE chat, PDF parser)
+```
+
+---
+
+## 🧪 Running Tests
+
+### Backend Tests
+Ensure your virtual environment is activated, then run:
+```bash
+cd backend
+pytest tests/
+```
+
+### Frontend Tests
+Navigate to the frontend directory and run Vitest:
+```bash
+cd frontend
+npm run test
+```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! 
+1. Fork the repository.
+2. Create a new feature branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`).
+4. Push to the branch (`git push origin feature/amazing-feature`).
+5. Open a Pull Request.
+
+Please ensure all tests pass and your code is properly linted before submitting.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
