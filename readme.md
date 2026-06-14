@@ -10,6 +10,26 @@ ThinkTab AI is a powerful, contextual AI research assistant packaged as a Google
 
 ThinkTab AI operates with a **Soft Human-in-the-Loop (HITL)** design, providing instant responses with the option to escalate complex tasks to a deeper, self-evaluating reasoning pipeline.
 
+## 📸 See it in Action
+
+<p align="center">
+  <img src="images/fast-mode.png" alt="ThinkTab Fast Mode Demo" width="800" />
+  <br>
+  <em><strong>Fast Mode:</strong> Instant, factual summaries and Q&A powered by local embeddings and vector search.</em>
+</p>
+
+<p align="center">
+  <img src="images/deep-mode.png" alt="ThinkTab Deep Mode Demo" width="800" />
+  <br>
+  <em><strong>Deep Mode:</strong> Complex reasoning and document comparison with Self-RAG hallucination grading.</em>
+</p>
+
+<p align="center">
+  <img src="images/multi-tab.png" alt="ThinkTab Multi-Tab Demo" width="800" />
+  <br>
+  <em><strong>Multi-Document Synthesis:</strong> Pin multiple tabs and PDFs to chat seamlessly across different knowledge sources.</em>
+</p>
+
 ---
 
 ## 🌟 Advanced Features
