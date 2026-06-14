@@ -24,8 +24,8 @@ Rules for standalone_query:
 - If the question is already standalone and clear, return it exactly as-is.
 
 Rules for target_source_ids:
-- Look at the AVAILABLE CONTEXT SOURCES. If the user's query refers to specific UI elements (e.g., "pinned tab", "this page", "the pdf"), you MUST output the exact string `source_id` for those documents.
-- If the user asks to compare things, output the `source_id`s for all relevant documents.
+- Look at the AVAILABLE CONTEXT SOURCES. If the user's query refers to specific UI elements (e.g., "pinned tab", "this page", "the pdf"), you MUST output the exact title strings of those documents from the available list.
+- If the user asks to compare things, output the title strings for all relevant documents.
 - If the user asks a general question and does not specify a source, return an empty list `[]`.
 """
 
