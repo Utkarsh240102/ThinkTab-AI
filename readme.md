@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/icons/icon128.png" width="128" alt="ThinkTab AI Logo" />
+</p>
+
 # 🧠 ThinkTab AI
 
 > **Your Contextual Web Assistant**
